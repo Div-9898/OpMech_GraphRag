@@ -1,0 +1,1987 @@
+# OpMech-GraphRAG: Commutator-Guided Explore/Exploit Implementation
+
+## Project Context
+
+You are implementing the **OpMech-GraphRAG** system on top of an existing MoE-built knowledge graph. The graph is stored in Neo4j and contains Apple SEC filings (10-K, 10-Q) from FY2022-FY2024.
+
+### Existing Infrastructure
+- **Neo4j Database**: `bolt://localhost:7687`
+- **Graph Statistics**: 1,737 nodes, 26,842 edges, 1 connected component
+- **LLM**: Qwen2.5-7B-Instruct via vLLM at `http://localhost:8000/v1`
+- **Embeddings**: FinBERT (768 dimensions) stored in `data/embeddings/`
+
+### Node Types
+- `FINANCIAL_LINE` (963 nodes) - XBRL financial data
+- `ENTITY` (516 nodes) - Extracted entities
+- `NOTE` (163 nodes) - Footnotes to financial statements
+- `TEXT_SECTION` (95 nodes) - MD&A, Risk Factors, Business sections
+
+### Edge Types
+- `CAUSED_BY`, `LEADS_TO` - Causal relationships
+- `MENTIONS_ENTITY`, `ENTITY_RELATED_TO` - Entity relationships
+- `TEMPORAL_NEXT` - Time-based links across periods
+- `REFERS_TO` - Cross-references
+- `DISCUSSES`, `EXPLAINS_LINE_ITEM` - Table-text connections
+- `SEMANTICALLY_SIMILAR` - Semantic similarity
+
+### Node Properties
+- `id`: Unique identifier (e.g., `AAPL-10-K-FY2022_TS_0006`)
+- `type`: Node type
+- `text`: Content text (truncated to 2000 chars)
+- `filing_id`: Source filing (e.g., `AAPL-10-K-FY2022`)
+- `period`: Time period (e.g., `FY2022`, `Q1-2024`)
+- `section`: Document section (e.g., `Item 1A`, `Item 7`)
+- `xbrl_tag`: XBRL taxonomy tag (for FINANCIAL_LINE)
+- `value`: Numeric value (for FINANCIAL_LINE)
+
+### Edge Properties
+- `id`: Unique identifier
+- `type`: Edge type
+- `expert`: Creating expert (e.g., `CausalChainBuilder`)
+- `confidence`: Confidence score (0.0 - 1.0)
+- `evidence`: Supporting evidence text
+
+---
+
+## Task: Implement Commutator-Guided Explore/Exploit GraphRAG
+
+### Core Concept
+
+The system runs **two operators** (Structure-First and Narrative-First) on each query and measures their **divergence** using a commutator formula. The divergence signal controls:
+
+1. **Exploration depth** (number of hops)
+2. **Traversal width** (nodes per hop)
+3. **Edge type selection** (focused vs. broad)
+4. **Output mode** (single answer vs. dual hypothesis)
+
+**Key Insight**: High divergence = operators disagree = EXPLORE more. Low divergence = operators agree = EXPLOIT and stop early.
+
+---
+
+## Mathematical Formulation
+
+### 1. Belief State
+
+A belief state `b` consists of:
+```
+b = {
+    evidence: Set[Node],           # Retrieved nodes
+    answer: str,                   # Generated answer
+    confidence_scores: List[float], # Per-evidence confidence
+    operator_path: str             # "structure_first" or "narrative_first"
+}
+```
+
+### 2. Operators
+
+**Operator A (Structure-First)**: Numbers → Narrative
+```
+A(q, G, h) = {
+    seeds: top-k FINANCIAL_LINE nodes by query similarity
+    traverse: TEMPORAL_NEXT → EXPLAINS_LINE_ITEM → REFERS_TO
+    hops: h
+    output: belief state b_A
+}
+```
+
+**Operator B (Narrative-First)**: Narrative → Numbers
+```
+B(q, G, h) = {
+    seeds: top-k TEXT_SECTION/NOTE nodes by vector similarity
+    traverse: CAUSED_BY → DISCUSSES → MENTIONS_ENTITY → SEMANTICALLY_SIMILAR
+    hops: h
+    output: belief state b_B
+}
+```
+
+### 3. Commutator Formula (EXACT SPECIFICATION)
+
+The commutator measures divergence between operators A and B:
+
+```
+Δ(q, h) = w_E · Δ_E + w_V · Δ_V + w_A · Δ_A + w_C · Δ_C
+
+Where:
+- Δ_E = Evidence Divergence (what nodes were retrieved?)
+- Δ_V = Structural Divergence (what sections/types were covered?)
+- Δ_A = Answer Divergence (how different are the conclusions?)
+- Δ_C = Confidence Divergence (how confident is each path?)
+
+Default weights: w_E = 0.30, w_V = 0.20, w_A = 0.30, w_C = 0.20
+```
+
+#### 3.1 Evidence Divergence (Δ_E)
+
+Jaccard distance between evidence node sets:
+
+```python
+def compute_evidence_divergence(evidence_A: Set[str], evidence_B: Set[str]) -> float:
+    """
+    Δ_E = 1 - |E_A ∩ E_B| / |E_A ∪ E_B|
+    
+    Range: [0, 1]
+    - 0 = identical evidence sets
+    - 1 = completely disjoint evidence sets
+    """
+    if not evidence_A and not evidence_B:
+        return 0.0
+    
+    intersection = len(evidence_A & evidence_B)
+    union = len(evidence_A | evidence_B)
+    
+    return 1.0 - (intersection / union) if union > 0 else 0.0
+```
+
+#### 3.2 Structural Divergence (Δ_V)
+
+Jaccard distance between structural attributes (sections, node types, periods):
+
+```python
+def compute_structural_divergence(
+    evidence_A: List[Node],
+    evidence_B: List[Node]
+) -> float:
+    """
+    Δ_V = 1 - |V_A ∩ V_B| / |V_A ∪ V_B|
+    
+    Where V = {(section, type, period)} tuples
+    
+    Range: [0, 1]
+    - 0 = same structural coverage
+    - 1 = completely different structural coverage
+    """
+    def extract_structure(nodes: List[Node]) -> Set[tuple]:
+        return {
+            (
+                n.metadata.get('section', 'unknown'),
+                n.metadata.get('type', 'unknown'),
+                n.metadata.get('period', 'unknown')
+            )
+            for n in nodes
+        }
+    
+    V_A = extract_structure(evidence_A)
+    V_B = extract_structure(evidence_B)
+    
+    if not V_A and not V_B:
+        return 0.0
+    
+    intersection = len(V_A & V_B)
+    union = len(V_A | V_B)
+    
+    return 1.0 - (intersection / union) if union > 0 else 0.0
+```
+
+#### 3.3 Answer Divergence (Δ_A)
+
+Cosine distance between answer embeddings:
+
+```python
+def compute_answer_divergence(
+    answer_A: str,
+    answer_B: str,
+    embed_fn: Callable[[str], np.ndarray]
+) -> float:
+    """
+    Δ_A = 1 - cos(φ(a_A), φ(a_B))
+    
+    Where φ is the embedding function (FinBERT)
+    
+    Range: [0, 1] (assuming normalized embeddings)
+    - 0 = identical semantic meaning
+    - 1 = completely opposite meaning
+    """
+    emb_A = embed_fn(answer_A)
+    emb_B = embed_fn(answer_B)
+    
+    # Normalize
+    emb_A = emb_A / np.linalg.norm(emb_A)
+    emb_B = emb_B / np.linalg.norm(emb_B)
+    
+    cosine_sim = np.dot(emb_A, emb_B)
+    
+    # Clamp to [0, 1] range
+    return max(0.0, min(1.0, 1.0 - cosine_sim))
+```
+
+#### 3.4 Confidence Divergence (Δ_C) - NEW
+
+This captures disagreement in confidence levels between operators:
+
+```python
+def compute_confidence_divergence(
+    evidence_A: List[Node],
+    evidence_B: List[Node],
+    edge_confidences_A: List[float],
+    edge_confidences_B: List[float]
+) -> float:
+    """
+    Δ_C captures two aspects:
+    
+    1. Path confidence difference: |mean(conf_A) - mean(conf_B)|
+    2. Confidence variance ratio: measures if one path is certain while other is uncertain
+    
+    Formula:
+    Δ_C = α · |μ_A - μ_B| + β · |σ_A - σ_B| / max(σ_A, σ_B, ε)
+    
+    Where:
+    - μ_A, μ_B = mean confidence of edges in path A, B
+    - σ_A, σ_B = std dev of confidence in path A, B
+    - α = 0.6, β = 0.4 (weights)
+    - ε = 0.01 (small constant to avoid division by zero)
+    
+    Range: [0, 1]
+    - 0 = both paths equally confident
+    - 1 = one path very confident, other very uncertain
+    """
+    if not edge_confidences_A:
+        edge_confidences_A = [0.5]  # Default if no edges
+    if not edge_confidences_B:
+        edge_confidences_B = [0.5]
+    
+    # Mean confidence
+    mu_A = np.mean(edge_confidences_A)
+    mu_B = np.mean(edge_confidences_B)
+    
+    # Std dev of confidence
+    sigma_A = np.std(edge_confidences_A) if len(edge_confidences_A) > 1 else 0.0
+    sigma_B = np.std(edge_confidences_B) if len(edge_confidences_B) > 1 else 0.0
+    
+    # Mean difference component
+    mean_diff = abs(mu_A - mu_B)
+    
+    # Variance difference component (normalized)
+    epsilon = 0.01
+    max_sigma = max(sigma_A, sigma_B, epsilon)
+    variance_diff = abs(sigma_A - sigma_B) / max_sigma
+    
+    # Weighted combination
+    alpha, beta = 0.6, 0.4
+    delta_C = alpha * mean_diff + beta * variance_diff
+    
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, delta_C))
+```
+
+#### 3.5 Combined Commutator (Final Formula)
+
+```python
+@dataclass
+class CommutatorResult:
+    """Complete commutator computation result."""
+    
+    # Individual divergence components
+    delta_E: float  # Evidence divergence
+    delta_V: float  # Structural divergence
+    delta_A: float  # Answer divergence
+    delta_C: float  # Confidence divergence
+    
+    # Combined score
+    combined: float
+    
+    # Metadata
+    weights: Dict[str, float]
+    hop: int
+    
+    # Operator scores (for diagnostics)
+    operator_A_score: float  # Overall quality score for operator A
+    operator_B_score: float  # Overall quality score for operator B
+
+
+def compute_commutator(
+    belief_A: BeliefState,
+    belief_B: BeliefState,
+    embed_fn: Callable[[str], np.ndarray],
+    weights: Dict[str, float] = None,
+    hop: int = 1
+) -> CommutatorResult:
+    """
+    Compute the full commutator proxy for operator divergence.
+    
+    Formula:
+    Δ(q, h) = w_E · Δ_E + w_V · Δ_V + w_A · Δ_A + w_C · Δ_C
+    
+    Also computes operator scores:
+    score_A = mean(edge_confidences_A) * coverage_A * relevance_A
+    score_B = mean(edge_confidences_B) * coverage_B * relevance_B
+    """
+    # Default weights
+    if weights is None:
+        weights = {
+            'evidence': 0.30,
+            'structural': 0.20,
+            'answer': 0.30,
+            'confidence': 0.20
+        }
+    
+    # Extract evidence node IDs
+    evidence_ids_A = {n.id for n in belief_A.evidence}
+    evidence_ids_B = {n.id for n in belief_B.evidence}
+    
+    # Compute individual divergences
+    delta_E = compute_evidence_divergence(evidence_ids_A, evidence_ids_B)
+    delta_V = compute_structural_divergence(belief_A.evidence, belief_B.evidence)
+    delta_A = compute_answer_divergence(belief_A.answer, belief_B.answer, embed_fn)
+    delta_C = compute_confidence_divergence(
+        belief_A.evidence,
+        belief_B.evidence,
+        belief_A.edge_confidences,
+        belief_B.edge_confidences
+    )
+    
+    # Combined commutator
+    combined = (
+        weights['evidence'] * delta_E +
+        weights['structural'] * delta_V +
+        weights['answer'] * delta_A +
+        weights['confidence'] * delta_C
+    )
+    
+    # Compute operator scores
+    operator_A_score = compute_operator_score(belief_A)
+    operator_B_score = compute_operator_score(belief_B)
+    
+    return CommutatorResult(
+        delta_E=delta_E,
+        delta_V=delta_V,
+        delta_A=delta_A,
+        delta_C=delta_C,
+        combined=combined,
+        weights=weights,
+        hop=hop,
+        operator_A_score=operator_A_score,
+        operator_B_score=operator_B_score
+    )
+
+
+def compute_operator_score(belief: BeliefState) -> float:
+    """
+    Compute overall quality score for an operator's output.
+    
+    Score = confidence_score * coverage_score * diversity_score
+    
+    Where:
+    - confidence_score = mean edge confidence (0-1)
+    - coverage_score = min(1, |evidence| / target_k) (0-1)
+    - diversity_score = unique_sections / total_evidence (0-1)
+    
+    Range: [0, 1]
+    """
+    if not belief.evidence:
+        return 0.0
+    
+    # Confidence score: mean of edge confidences
+    if belief.edge_confidences:
+        confidence_score = np.mean(belief.edge_confidences)
+    else:
+        confidence_score = 0.5
+    
+    # Coverage score: did we find enough evidence?
+    target_k = 10  # Target number of evidence nodes
+    coverage_score = min(1.0, len(belief.evidence) / target_k)
+    
+    # Diversity score: are we covering multiple sections?
+    sections = {n.metadata.get('section', 'unknown') for n in belief.evidence}
+    diversity_score = len(sections) / len(belief.evidence) if belief.evidence else 0.0
+    
+    # Combined score
+    return confidence_score * coverage_score * (0.5 + 0.5 * diversity_score)
+```
+
+---
+
+## 4. Explore/Exploit Control Logic
+
+### 4.1 Strategy Parameters
+
+```python
+@dataclass
+class TraversalStrategy:
+    """Parameters controlling graph traversal."""
+    
+    # Depth control
+    max_hops: int           # Maximum traversal depth (1-6)
+    current_hop: int        # Current hop in iteration
+    
+    # Width control
+    seeds_per_operator: int  # Initial seed nodes (3-10)
+    nodes_per_hop: int       # Max nodes to expand per hop (5-20)
+    
+    # Edge selection
+    edge_types_A: List[str]  # Edge types for operator A
+    edge_types_B: List[str]  # Edge types for operator B
+    
+    # Pruning control
+    min_edge_confidence: float  # Minimum edge confidence to traverse (0.3-0.8)
+    top_k_evidence: int         # Final evidence selection (10-30)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # NEW: CONFIDENCE WEIGHTING PARAMETERS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Path confidence decay (prevents over-penalizing long paths)
+    confidence_decay: float     # Decay factor per hop (0.85-0.95)
+    
+    # Evidence ranking weights
+    relevance_weight: float     # Weight for query-embedding similarity (0.4-0.7)
+    confidence_weight: float    # Weight for path confidence (0.3-0.6)
+    
+    # Output control
+    output_mode: str         # "exploit", "adaptive", "explore"
+    
+    # Thresholds (for reference)
+    tau_low: float           # Below this: exploit
+    tau_high: float          # Above this: explore
+
+
+class ExploreExploitController:
+    """
+    Maps commutator divergence to traversal strategy.
+    
+    Core principle:
+    - Low divergence (Δ < τ_low) → EXPLOIT: shallow, focused, confident
+    - High divergence (Δ > τ_high) → EXPLORE: deep, wide, uncertain
+    - Medium divergence → ADAPTIVE: adjust based on trajectory
+    
+    CONFIDENCE INTEGRATION:
+    - In EXPLOIT mode: Prefer high-confidence edges (high min_edge_confidence)
+    - In EXPLORE mode: Accept lower-confidence edges to find more paths
+    - relevance_weight vs confidence_weight shifts based on mode
+    """
+    
+    def __init__(
+        self,
+        tau_low: float = 0.25,
+        tau_high: float = 0.60,
+        max_hops: int = 6,
+        min_hops: int = 1
+    ):
+        self.tau_low = tau_low
+        self.tau_high = tau_high
+        self.max_hops = max_hops
+        self.min_hops = min_hops
+    
+    def compute_strategy(
+        self,
+        commutator: CommutatorResult,
+        trajectory: List[CommutatorResult] = None
+    ) -> TraversalStrategy:
+        """
+        Compute traversal strategy from commutator result.
+        
+        The explore_weight ∈ [0, 1] controls all parameters:
+        - 0 = full exploit mode
+        - 1 = full explore mode
+        """
+        divergence = commutator.combined
+        
+        # Compute base explore weight from divergence
+        if divergence < self.tau_low:
+            explore_weight = 0.0
+        elif divergence > self.tau_high:
+            explore_weight = 1.0
+        else:
+            # Linear interpolation
+            explore_weight = (divergence - self.tau_low) / (self.tau_high - self.tau_low)
+        
+        # Adjust based on trajectory (if available)
+        if trajectory and len(trajectory) >= 2:
+            trend = trajectory[-1].combined - trajectory[-2].combined
+            
+            if trend > 0.1:
+                # Divergence increasing → need more exploration
+                explore_weight = min(1.0, explore_weight + 0.25)
+            elif trend < -0.1:
+                # Divergence decreasing → converging, can exploit more
+                explore_weight = max(0.0, explore_weight - 0.15)
+        
+        # Adjust based on operator score difference
+        score_diff = abs(commutator.operator_A_score - commutator.operator_B_score)
+        if score_diff > 0.3:
+            # One operator much better → slight exploration to verify
+            explore_weight = max(explore_weight, 0.3)
+        
+        # Adjust based on confidence divergence specifically
+        if commutator.delta_C > 0.5:
+            # High confidence disagreement → explore more
+            explore_weight = min(1.0, explore_weight + 0.15)
+        
+        return self._build_strategy(explore_weight, commutator.hop)
+    
+    def _build_strategy(self, w: float, current_hop: int) -> TraversalStrategy:
+        """
+        Build concrete strategy from explore weight.
+        
+        Parameter interpolation:
+        
+        Parameter              | Exploit (w=0) | Explore (w=1)
+        -----------------------|---------------|---------------
+        max_hops               | 2             | 6
+        seeds_per_operator     | 3             | 8
+        nodes_per_hop          | 5             | 15
+        min_edge_confidence    | 0.7           | 0.4
+        top_k_evidence         | 10            | 25
+        confidence_decay       | 0.95          | 0.85
+        relevance_weight       | 0.5           | 0.7
+        confidence_weight      | 0.5           | 0.3
+        edge_types             | focused (3)   | all (8)
+        
+        KEY INSIGHT:
+        - EXPLOIT mode: High min_edge_confidence, balance relevance/confidence equally
+        - EXPLORE mode: Low min_edge_confidence (accept weaker edges), prioritize relevance
+        """
+        
+        # Interpolate parameters
+        max_hops = int(2 + w * 4)                    # 2 → 6
+        seeds_per_operator = int(3 + w * 5)          # 3 → 8
+        nodes_per_hop = int(5 + w * 10)              # 5 → 15
+        min_edge_confidence = 0.7 - w * 0.3          # 0.7 → 0.4
+        top_k_evidence = int(10 + w * 15)            # 10 → 25
+        
+        # NEW: Confidence-related parameters
+        confidence_decay = 0.95 - w * 0.10           # 0.95 → 0.85
+        relevance_weight = 0.5 + w * 0.2             # 0.5 → 0.7 (more relevance in explore)
+        confidence_weight = 0.5 - w * 0.2            # 0.5 → 0.3 (less confidence in explore)
+        
+        # Edge type selection for Operator A (Structure-First)
+        if w < 0.3:
+            edge_types_A = ["TEMPORAL_NEXT", "EXPLAINS_LINE_ITEM"]
+        elif w < 0.7:
+            edge_types_A = ["TEMPORAL_NEXT", "EXPLAINS_LINE_ITEM", "REFERS_TO"]
+        else:
+            edge_types_A = ["TEMPORAL_NEXT", "EXPLAINS_LINE_ITEM", "REFERS_TO", 
+                           "DISCUSSES", "SEMANTICALLY_SIMILAR"]
+        
+        # Edge type selection for Operator B (Narrative-First)
+        if w < 0.3:
+            edge_types_B = ["CAUSED_BY", "DISCUSSES"]
+        elif w < 0.7:
+            edge_types_B = ["CAUSED_BY", "DISCUSSES", "MENTIONS_ENTITY", "REFERS_TO"]
+        else:
+            edge_types_B = ["CAUSED_BY", "DISCUSSES", "MENTIONS_ENTITY", "REFERS_TO",
+                           "SEMANTICALLY_SIMILAR", "ENTITY_RELATED_TO", "LEADS_TO"]
+        
+        # Output mode
+        if w < 0.3:
+            output_mode = "exploit"
+        elif w < 0.7:
+            output_mode = "adaptive"
+        else:
+            output_mode = "explore"
+        
+        return TraversalStrategy(
+            max_hops=max_hops,
+            current_hop=current_hop,
+            seeds_per_operator=seeds_per_operator,
+            nodes_per_hop=nodes_per_hop,
+            edge_types_A=edge_types_A,
+            edge_types_B=edge_types_B,
+            min_edge_confidence=min_edge_confidence,
+            top_k_evidence=top_k_evidence,
+            confidence_decay=confidence_decay,
+            relevance_weight=relevance_weight,
+            confidence_weight=confidence_weight,
+            output_mode=output_mode,
+            tau_low=self.tau_low,
+            tau_high=self.tau_high
+        )
+```
+
+---
+
+## 5. Complete System Implementation
+
+### 5.1 Data Classes
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Dict, Set, Optional, Callable
+from enum import Enum
+import numpy as np
+
+
+class OutputMode(Enum):
+    EXPLOIT = "exploit"       # Single confident answer
+    ADAPTIVE = "adaptive"     # Merged answer with caveats
+    EXPLORE = "explore"       # Dual hypothesis with uncertainty
+
+
+@dataclass
+class Node:
+    """Graph node representation."""
+    id: str
+    type: str
+    text: str
+    metadata: Dict = field(default_factory=dict)
+    embedding: Optional[np.ndarray] = None
+
+
+@dataclass
+class Edge:
+    """Graph edge representation."""
+    source_id: str
+    target_id: str
+    type: str
+    confidence: float       # ← FROM MoE Graph Builder (0.0 - 1.0)
+    expert: str             # ← Which expert created this edge
+    evidence: str = ""
+
+
+@dataclass
+class TraversedNode:
+    """Node with path confidence from traversal."""
+    node: Node
+    path_confidence: float      # Product of edge confidences along path (with decay)
+    incoming_edge: Optional[Edge]
+    hop_distance: int
+
+
+@dataclass
+class BeliefState:
+    """State after running an operator."""
+    evidence: List[Node]
+    answer: str
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # EDGE CONFIDENCE FIELDS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # All edge confidences from traversal (for Δ_C computation)
+    edge_confidences: List[float]
+    
+    # Per-evidence path confidence (for ranking and weighting)
+    evidence_confidences: List[float]
+    
+    # Aggregate path confidence (for operator scoring)
+    mean_path_confidence: float
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    operator_path: str  # "structure_first" or "narrative_first"
+    hops_used: int
+    seeds_used: List[str]
+    edges_traversed: List[Edge]
+
+
+@dataclass
+class QueryResult:
+    """Final output of the system."""
+    answer: str
+    confidence: float
+    mode: OutputMode
+    hops_used: int
+    trajectory: List['CommutatorResult']
+    evidence_A: List[Node]
+    evidence_B: List[Node]
+    answer_A: str
+    answer_B: str
+    reasoning: str
+    operator_scores: Dict[str, float]
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # NEW: CONFIDENCE DIAGNOSTICS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Mean path confidence for each operator
+    path_confidence_A: float = 0.0
+    path_confidence_B: float = 0.0
+    
+    # Edge confidence statistics
+    edge_conf_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # e.g., {"operator_A": {"mean": 0.8, "std": 0.1, "min": 0.5, "max": 0.95}}
+```
+
+### 5.2 Graph Interface (WITH CONFIDENCE-WEIGHTED TRAVERSAL)
+
+```python
+class KnowledgeGraphInterface:
+    """Interface to Neo4j knowledge graph with confidence-weighted operations."""
+    
+    def __init__(self, uri: str, user: str, password: str):
+        from neo4j import GraphDatabase
+        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.embeddings = self._load_embeddings()
+    
+    def _load_embeddings(self) -> Dict[str, np.ndarray]:
+        """Load pre-computed FinBERT embeddings."""
+        import os
+        embeddings = {}
+        emb_dir = "data/embeddings"
+        
+        for filing_dir in os.listdir(emb_dir):
+            filing_path = os.path.join(emb_dir, filing_dir)
+            if os.path.isdir(filing_path):
+                for emb_file in os.listdir(filing_path):
+                    if emb_file.endswith('.npz'):
+                        data = np.load(os.path.join(filing_path, emb_file))
+                        for node_id in data.files:
+                            embeddings[node_id] = data[node_id]
+        
+        return embeddings
+    
+    def search_by_type(
+        self,
+        query_embedding: np.ndarray,
+        node_types: List[str],
+        top_k: int = 5
+    ) -> List[Node]:
+        """
+        Search for nodes by type using embedding similarity.
+        
+        Returns top_k most similar nodes of specified types.
+        """
+        # Get nodes of specified types
+        with self.driver.session() as session:
+            result = session.run("""
+                MATCH (n:Node)
+                WHERE n.type IN $types
+                RETURN n.id as id, n.type as type, n.text as text,
+                       n.filing_id as filing_id, n.period as period,
+                       n.section as section, n.xbrl_tag as xbrl_tag,
+                       n.value as value
+            """, types=node_types)
+            
+            candidates = []
+            for record in result:
+                node_id = record['id']
+                if node_id in self.embeddings:
+                    emb = self.embeddings[node_id]
+                    similarity = np.dot(query_embedding, emb) / (
+                        np.linalg.norm(query_embedding) * np.linalg.norm(emb)
+                    )
+                    candidates.append((similarity, Node(
+                        id=node_id,
+                        type=record['type'],
+                        text=record['text'] or "",
+                        metadata={
+                            'filing_id': record['filing_id'],
+                            'period': record['period'],
+                            'section': record['section'],
+                            'xbrl_tag': record['xbrl_tag'],
+                            'value': record['value']
+                        },
+                        embedding=emb
+                    )))
+            
+            # Sort by similarity and return top_k
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            return [node for _, node in candidates[:top_k]]
+    
+    def traverse_with_confidence(
+        self,
+        seed_ids: List[str],
+        edge_types: List[str],
+        hops: int,
+        max_per_hop: int,
+        min_confidence: float,
+        confidence_decay: float = 0.9
+    ) -> tuple[List[TraversedNode], List[Edge]]:
+        """
+        CONFIDENCE-WEIGHTED multi-hop graph traversal.
+        
+        KEY DIFFERENCE from basic traverse:
+        1. Edges are sorted by confidence (prefer high-confidence paths)
+        2. Path confidence is tracked (product of edge confidences)
+        3. Returns TraversedNode with path_confidence attached
+        
+        Args:
+            seed_ids: Starting node IDs
+            edge_types: Allowed edge types for traversal
+            hops: Maximum traversal depth
+            max_per_hop: Maximum nodes to expand per hop
+            min_confidence: Minimum edge confidence to traverse
+            confidence_decay: Decay factor for path confidence (default 0.9)
+                             This prevents over-penalizing long paths
+        
+        Returns:
+            (traversed_nodes, edges) - nodes with path confidence, all edges used
+        
+        Path Confidence Formula:
+            path_conf(n) = ∏(edge.confidence * decay^hop) for edges in path to n
+        
+        Example:
+            Seed → Edge(0.9) → Node1 → Edge(0.8) → Node2
+            path_conf(Node1) = 0.9 * 0.9^1 = 0.81
+            path_conf(Node2) = 0.81 * 0.8 * 0.9^2 = 0.52
+        """
+        import heapq
+        
+        # Priority queue: (-path_confidence, node_id, hop_distance, incoming_edge)
+        # Negative because heapq is min-heap, we want max confidence first
+        frontier = []
+        for seed_id in seed_ids:
+            heapq.heappush(frontier, (-1.0, seed_id, 0, None))
+        
+        visited = {}  # node_id -> (path_confidence, hop_distance, incoming_edge)
+        all_edges = []
+        
+        with self.driver.session() as session:
+            while frontier:
+                neg_conf, node_id, hop_dist, incoming_edge = heapq.heappop(frontier)
+                path_conf = -neg_conf
+                
+                # Skip if already visited with higher confidence
+                if node_id in visited:
+                    if visited[node_id][0] >= path_conf:
+                        continue
+                
+                visited[node_id] = (path_conf, hop_dist, incoming_edge)
+                
+                # Stop if max hops reached
+                if hop_dist >= hops:
+                    continue
+                
+                # Find outgoing edges, SORTED BY CONFIDENCE
+                edge_result = session.run("""
+                    MATCH (source:Node {id: $node_id})-[r]->(target:Node)
+                    WHERE type(r) IN $edge_types
+                    AND r.confidence >= $min_conf
+                    RETURN target.id as target_id,
+                           type(r) as edge_type,
+                           r.confidence as confidence,
+                           r.expert as expert,
+                           r.evidence as evidence,
+                           target.type as target_type,
+                           target.text as target_text,
+                           target.filing_id as target_filing_id,
+                           target.period as target_period,
+                           target.section as target_section,
+                           target.xbrl_tag as target_xbrl_tag,
+                           target.value as target_value
+                    ORDER BY r.confidence DESC
+                    LIMIT $limit
+                """, 
+                    node_id=node_id,
+                    edge_types=edge_types,
+                    min_conf=min_confidence,
+                    limit=max_per_hop
+                )
+                
+                for record in edge_result:
+                    target_id = record['target_id']
+                    edge_conf = record['confidence'] or 0.5
+                    
+                    # Create edge object
+                    edge = Edge(
+                        source_id=node_id,
+                        target_id=target_id,
+                        type=record['edge_type'],
+                        confidence=edge_conf,
+                        expert=record['expert'] or "unknown",
+                        evidence=record['evidence'] or ""
+                    )
+                    all_edges.append(edge)
+                    
+                    # Calculate new path confidence with decay
+                    # decay^hop prevents long paths from being overly penalized
+                    decay_factor = confidence_decay ** (hop_dist + 1)
+                    new_path_conf = path_conf * edge_conf * decay_factor
+                    
+                    # Add to frontier if not visited or better path found
+                    if target_id not in visited or visited[target_id][0] < new_path_conf:
+                        heapq.heappush(frontier, (-new_path_conf, target_id, hop_dist + 1, edge))
+            
+            # Build TraversedNode objects
+            traversed_nodes = []
+            for node_id, (path_conf, hop_dist, incoming_edge) in visited.items():
+                # Fetch node details
+                node_result = session.run("""
+                    MATCH (n:Node {id: $node_id})
+                    RETURN n.id as id, n.type as type, n.text as text,
+                           n.filing_id as filing_id, n.period as period,
+                           n.section as section, n.xbrl_tag as xbrl_tag,
+                           n.value as value
+                """, node_id=node_id)
+                
+                record = node_result.single()
+                if record:
+                    node = Node(
+                        id=record['id'],
+                        type=record['type'],
+                        text=record['text'] or "",
+                        metadata={
+                            'filing_id': record['filing_id'],
+                            'period': record['period'],
+                            'section': record['section'],
+                            'xbrl_tag': record['xbrl_tag'],
+                            'value': record['value']
+                        }
+                    )
+                    
+                    traversed_nodes.append(TraversedNode(
+                        node=node,
+                        path_confidence=path_conf,
+                        incoming_edge=incoming_edge,
+                        hop_distance=hop_dist
+                    ))
+        
+        return traversed_nodes, all_edges
+    
+    def close(self):
+        """Close the database connection."""
+        self.driver.close()
+```
+
+### 5.3 Operators (WITH EDGE CONFIDENCE INTEGRATION)
+
+**CRITICAL: The MoE Graph Builder assigned confidence scores to every edge. We MUST use these scores in:**
+1. **Traversal priority** - Prefer high-confidence edges
+2. **Evidence ranking** - Weight by path confidence
+3. **Operator scoring** - Aggregate confidence for comparison
+
+```python
+@dataclass
+class TraversedNode:
+    """Node with its path confidence from traversal."""
+    node: Node
+    path_confidence: float      # Product of edge confidences along path
+    incoming_edge: Optional[Edge]
+    hop_distance: int
+
+
+class OperatorA:
+    """
+    Structure-First Operator (Numbers → Narrative)
+    
+    Workflow:
+    1. Seed from FINANCIAL_LINE nodes (quantitative data)
+    2. Traverse via structure-oriented edges, WEIGHTED BY EDGE CONFIDENCE
+    3. Reach explanatory text through EXPLAINS_LINE_ITEM
+    
+    EDGE CONFIDENCE INTEGRATION:
+    - Traversal prefers high-confidence edges (confidence-weighted BFS)
+    - Path confidence = product of edge confidences along path
+    - Evidence ranking combines query relevance AND path confidence
+    """
+    
+    def __init__(self, graph: KnowledgeGraphInterface, embed_fn: Callable):
+        self.graph = graph
+        self.embed_fn = embed_fn
+    
+    def execute(
+        self,
+        query: str,
+        strategy: TraversalStrategy
+    ) -> BeliefState:
+        """Execute structure-first traversal with confidence weighting."""
+        
+        # Embed query
+        query_embedding = self.embed_fn(query)
+        
+        # Seed from financial nodes
+        seeds = self.graph.search_by_type(
+            query_embedding=query_embedding,
+            node_types=["FINANCIAL_LINE"],
+            top_k=strategy.seeds_per_operator
+        )
+        
+        seed_ids = [n.id for n in seeds]
+        
+        # Traverse graph WITH CONFIDENCE WEIGHTING
+        traversed_nodes, edges = self.graph.traverse_with_confidence(
+            seed_ids=seed_ids,
+            edge_types=strategy.edge_types_A,
+            hops=strategy.max_hops,
+            max_per_hop=strategy.nodes_per_hop,
+            min_confidence=strategy.min_edge_confidence,
+            confidence_decay=strategy.confidence_decay  # How much to weight confidence vs. breadth
+        )
+        
+        # Collect edge confidences (for Δ_C computation)
+        edge_confidences = [e.confidence for e in edges]
+        
+        # Select top-k evidence by COMBINED score (relevance + path confidence)
+        evidence, evidence_confidences = self._rank_evidence_with_confidence(
+            traversed_nodes=traversed_nodes,
+            query_embedding=query_embedding,
+            top_k=strategy.top_k_evidence,
+            relevance_weight=strategy.relevance_weight,      # Weight for embedding similarity
+            confidence_weight=strategy.confidence_weight      # Weight for path confidence
+        )
+        
+        return BeliefState(
+            evidence=evidence,
+            answer="",  # Will be filled by LLM
+            edge_confidences=edge_confidences,
+            evidence_confidences=evidence_confidences,  # NEW: per-evidence confidence
+            operator_path="structure_first",
+            hops_used=strategy.max_hops,
+            seeds_used=seed_ids,
+            edges_traversed=edges,
+            mean_path_confidence=np.mean([tn.path_confidence for tn in traversed_nodes]) if traversed_nodes else 0.0
+        )
+    
+    def _rank_evidence_with_confidence(
+        self,
+        traversed_nodes: List[TraversedNode],
+        query_embedding: np.ndarray,
+        top_k: int,
+        relevance_weight: float = 0.6,
+        confidence_weight: float = 0.4
+    ) -> tuple[List[Node], List[float]]:
+        """
+        Rank nodes by COMBINED score of:
+        1. Query relevance (embedding similarity)
+        2. Path confidence (product of edge confidences)
+        
+        Combined Score = relevance_weight * similarity + confidence_weight * path_confidence
+        
+        This ensures we prefer evidence that is:
+        - Relevant to the query (high similarity)
+        - Reached via high-confidence edges (trustworthy path)
+        """
+        scored = []
+        
+        for tn in traversed_nodes:
+            node = tn.node
+            if node.id in self.graph.embeddings:
+                emb = self.graph.embeddings[node.id]
+                
+                # Query relevance (cosine similarity)
+                similarity = np.dot(query_embedding, emb) / (
+                    np.linalg.norm(query_embedding) * np.linalg.norm(emb) + 1e-8
+                )
+                
+                # Path confidence (from traversal)
+                path_conf = tn.path_confidence
+                
+                # Combined score
+                combined_score = (
+                    relevance_weight * similarity + 
+                    confidence_weight * path_conf
+                )
+                
+                scored.append((combined_score, similarity, path_conf, node))
+        
+        # Sort by combined score
+        scored.sort(key=lambda x: x[0], reverse=True)
+        
+        # Return top-k nodes and their path confidences
+        top_nodes = [item[3] for item in scored[:top_k]]
+        top_confidences = [item[2] for item in scored[:top_k]]
+        
+        return top_nodes, top_confidences
+
+
+class OperatorB:
+    """
+    Narrative-First Operator (Narrative → Numbers)
+    
+    Workflow:
+    1. Seed from TEXT_SECTION and NOTE nodes (qualitative data)
+    2. Traverse via semantic/causal edges, WEIGHTED BY EDGE CONFIDENCE
+    3. Reach financial data through DISCUSSES, CAUSED_BY
+    
+    EDGE CONFIDENCE INTEGRATION:
+    - Same as OperatorA: confidence-weighted traversal and ranking
+    """
+    
+    def __init__(self, graph: KnowledgeGraphInterface, embed_fn: Callable):
+        self.graph = graph
+        self.embed_fn = embed_fn
+    
+    def execute(
+        self,
+        query: str,
+        strategy: TraversalStrategy
+    ) -> BeliefState:
+        """Execute narrative-first traversal with confidence weighting."""
+        
+        # Embed query
+        query_embedding = self.embed_fn(query)
+        
+        # Seed from narrative nodes
+        seeds = self.graph.search_by_type(
+            query_embedding=query_embedding,
+            node_types=["TEXT_SECTION", "NOTE"],
+            top_k=strategy.seeds_per_operator
+        )
+        
+        seed_ids = [n.id for n in seeds]
+        
+        # Traverse graph WITH CONFIDENCE WEIGHTING
+        traversed_nodes, edges = self.graph.traverse_with_confidence(
+            seed_ids=seed_ids,
+            edge_types=strategy.edge_types_B,
+            hops=strategy.max_hops,
+            max_per_hop=strategy.nodes_per_hop,
+            min_confidence=strategy.min_edge_confidence,
+            confidence_decay=strategy.confidence_decay
+        )
+        
+        # Collect edge confidences
+        edge_confidences = [e.confidence for e in edges]
+        
+        # Select top-k evidence by COMBINED score
+        evidence, evidence_confidences = self._rank_evidence_with_confidence(
+            traversed_nodes=traversed_nodes,
+            query_embedding=query_embedding,
+            top_k=strategy.top_k_evidence,
+            relevance_weight=strategy.relevance_weight,
+            confidence_weight=strategy.confidence_weight
+        )
+        
+        return BeliefState(
+            evidence=evidence,
+            answer="",
+            edge_confidences=edge_confidences,
+            evidence_confidences=evidence_confidences,
+            operator_path="narrative_first",
+            hops_used=strategy.max_hops,
+            seeds_used=seed_ids,
+            edges_traversed=edges,
+            mean_path_confidence=np.mean([tn.path_confidence for tn in traversed_nodes]) if traversed_nodes else 0.0
+        )
+    
+    def _rank_evidence_with_confidence(
+        self,
+        traversed_nodes: List[TraversedNode],
+        query_embedding: np.ndarray,
+        top_k: int,
+        relevance_weight: float = 0.6,
+        confidence_weight: float = 0.4
+    ) -> tuple[List[Node], List[float]]:
+        """Same implementation as OperatorA."""
+        scored = []
+        
+        for tn in traversed_nodes:
+            node = tn.node
+            if node.id in self.graph.embeddings:
+                emb = self.graph.embeddings[node.id]
+                similarity = np.dot(query_embedding, emb) / (
+                    np.linalg.norm(query_embedding) * np.linalg.norm(emb) + 1e-8
+                )
+                path_conf = tn.path_confidence
+                combined_score = relevance_weight * similarity + confidence_weight * path_conf
+                scored.append((combined_score, similarity, path_conf, node))
+        
+        scored.sort(key=lambda x: x[0], reverse=True)
+        
+        top_nodes = [item[3] for item in scored[:top_k]]
+        top_confidences = [item[2] for item in scored[:top_k]]
+        
+        return top_nodes, top_confidences
+```
+
+### 5.4 LLM Interface
+
+```python
+class LLMInterface:
+    """Interface to Qwen2.5-7B via vLLM."""
+    
+    def __init__(self, base_url: str = "http://localhost:8000/v1"):
+        from openai import OpenAI
+        self.client = OpenAI(base_url=base_url, api_key="not-needed")
+        self.model = "Qwen/Qwen2.5-7B-Instruct"
+    
+    def generate_answer(
+        self,
+        query: str,
+        evidence: List[Node],
+        operator_path: str
+    ) -> str:
+        """Generate answer from evidence."""
+        
+        # Format evidence
+        evidence_text = "\n\n".join([
+            f"[{n.type}] {n.metadata.get('section', 'N/A')} ({n.metadata.get('period', 'N/A')}):\n{n.text[:500]}"
+            for n in evidence[:10]
+        ])
+        
+        prompt = f"""You are a financial analyst examining Apple's SEC filings.
+
+QUERY: {query}
+
+EVIDENCE (from {operator_path} analysis):
+{evidence_text}
+
+Based on this evidence, provide a clear, factual answer to the query. 
+Cite specific evidence where relevant. Be concise but thorough."""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content
+    
+    def generate_merged_answer(
+        self,
+        query: str,
+        answer_A: str,
+        answer_B: str,
+        evidence_A: List[Node],
+        evidence_B: List[Node]
+    ) -> str:
+        """Generate merged answer from both perspectives."""
+        
+        prompt = f"""You are a financial analyst synthesizing two analysis perspectives.
+
+QUERY: {query}
+
+QUANTITATIVE PERSPECTIVE (Structure-First):
+{answer_A}
+
+QUALITATIVE PERSPECTIVE (Narrative-First):
+{answer_B}
+
+Synthesize these into a balanced answer that:
+1. Notes where both perspectives agree
+2. Acknowledges any differences or tensions
+3. Provides a nuanced conclusion
+4. Indicates confidence level based on agreement
+
+Be concise and analytical."""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content
+    
+    def generate_dual_hypothesis(
+        self,
+        query: str,
+        answer_A: str,
+        answer_B: str,
+        divergence: float
+    ) -> str:
+        """Generate dual hypothesis answer when divergence is high."""
+        
+        return f"""⚠️ ANALYSIS SHOWS STRUCTURAL AMBIGUITY (Divergence: {divergence:.2f})
+
+The evidence supports two distinct interpretations:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HYPOTHESIS A — Quantitative View (Structure-First):
+{answer_A}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HYPOTHESIS B — Qualitative View (Narrative-First):
+{answer_B}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RECOMMENDATION:
+This question exhibits irreducible ambiguity in Apple's SEC filings.
+The quantitative and qualitative evidence lead to different conclusions.
+Consider both perspectives when making decisions."""
+```
+
+### 5.5 Main System
+
+```python
+class OpMechGraphRAG:
+    """
+    Complete OpMech-GraphRAG system with commutator-guided explore/exploit.
+    """
+    
+    def __init__(
+        self,
+        neo4j_uri: str = "bolt://localhost:7687",
+        neo4j_user: str = "neo4j",
+        neo4j_password: str = "password",
+        vllm_url: str = "http://localhost:8000/v1",
+        tau_low: float = 0.25,
+        tau_high: float = 0.60,
+        max_hops: int = 6
+    ):
+        # Initialize components
+        self.graph = KnowledgeGraphInterface(neo4j_uri, neo4j_user, neo4j_password)
+        self.llm = LLMInterface(vllm_url)
+        self.embed_fn = self._create_embed_fn()
+        
+        # Initialize operators
+        self.operator_A = OperatorA(self.graph, self.embed_fn)
+        self.operator_B = OperatorB(self.graph, self.embed_fn)
+        
+        # Initialize controller
+        self.controller = ExploreExploitController(
+            tau_low=tau_low,
+            tau_high=tau_high,
+            max_hops=max_hops
+        )
+        
+        # Thresholds
+        self.tau_low = tau_low
+        self.tau_high = tau_high
+        self.max_hops = max_hops
+    
+    def _create_embed_fn(self) -> Callable[[str], np.ndarray]:
+        """Create embedding function using FinBERT."""
+        from transformers import AutoTokenizer, AutoModel
+        import torch
+        
+        tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+        model = AutoModel.from_pretrained("ProsusAI/finbert")
+        model.eval()
+        
+        if torch.cuda.is_available():
+            model = model.cuda()
+        
+        def embed(text: str) -> np.ndarray:
+            inputs = tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
+                padding=True
+            )
+            if torch.cuda.is_available():
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                outputs = model(**inputs)
+                # Mean pooling
+                embedding = outputs.last_hidden_state.mean(dim=1).squeeze()
+            
+            return embedding.cpu().numpy()
+        
+        return embed
+    
+    def query(self, query: str) -> QueryResult:
+        """
+        Execute query with commutator-guided explore/exploit.
+        
+        Main loop:
+        1. Run both operators at current hop depth
+        2. Compute commutator (divergence)
+        3. Update strategy based on divergence
+        4. Check stopping conditions
+        5. Repeat or return final answer
+        """
+        trajectory = []
+        hop = 1
+        
+        # Initial balanced strategy
+        initial_commutator = CommutatorResult(
+            delta_E=0.5, delta_V=0.5, delta_A=0.5, delta_C=0.5,
+            combined=0.5, weights={}, hop=0,
+            operator_A_score=0.5, operator_B_score=0.5
+        )
+        strategy = self.controller.compute_strategy(initial_commutator)
+        
+        belief_A = None
+        belief_B = None
+        
+        while hop <= strategy.max_hops:
+            # ══════════════════════════════════════════════════════════════
+            # STEP 1: Run both operators with current strategy
+            # ══════════════════════════════════════════════════════════════
+            
+            strategy.current_hop = hop
+            
+            belief_A = self.operator_A.execute(query, strategy)
+            belief_B = self.operator_B.execute(query, strategy)
+            
+            # Generate answers
+            belief_A.answer = self.llm.generate_answer(
+                query, belief_A.evidence, "structure_first"
+            )
+            belief_B.answer = self.llm.generate_answer(
+                query, belief_B.evidence, "narrative_first"
+            )
+            
+            # ══════════════════════════════════════════════════════════════
+            # STEP 2: Compute commutator
+            # ══════════════════════════════════════════════════════════════
+            
+            commutator = compute_commutator(
+                belief_A, belief_B, self.embed_fn, hop=hop
+            )
+            trajectory.append(commutator)
+            
+            # ══════════════════════════════════════════════════════════════
+            # STEP 3: Update strategy based on divergence
+            # ══════════════════════════════════════════════════════════════
+            
+            strategy = self.controller.compute_strategy(commutator, trajectory)
+            
+            # ══════════════════════════════════════════════════════════════
+            # STEP 4: Check stopping conditions
+            # ══════════════════════════════════════════════════════════════
+            
+            # Condition 1: Converged (low divergence)
+            if commutator.combined < self.tau_low:
+                return self._build_exploit_result(
+                    query, belief_A, belief_B, trajectory
+                )
+            
+            # Condition 2: Plateau (divergence stopped changing)
+            if len(trajectory) >= 2:
+                delta_change = abs(trajectory[-1].combined - trajectory[-2].combined)
+                if delta_change < 0.05:
+                    return self._build_adaptive_result(
+                        query, belief_A, belief_B, trajectory
+                    )
+            
+            # Condition 3: Diverging rapidly (give up on convergence)
+            if len(trajectory) >= 3:
+                if (trajectory[-1].combined > trajectory[-2].combined > trajectory[-3].combined):
+                    return self._build_explore_result(
+                        query, belief_A, belief_B, trajectory
+                    )
+            
+            hop += 1
+        
+        # ══════════════════════════════════════════════════════════════════
+        # Max hops reached - return based on final divergence
+        # ══════════════════════════════════════════════════════════════════
+        
+        final_divergence = trajectory[-1].combined
+        
+        if final_divergence > self.tau_high:
+            return self._build_explore_result(query, belief_A, belief_B, trajectory)
+        elif final_divergence < self.tau_low:
+            return self._build_exploit_result(query, belief_A, belief_B, trajectory)
+        else:
+            return self._build_adaptive_result(query, belief_A, belief_B, trajectory)
+    
+    def _build_exploit_result(
+        self,
+        query: str,
+        belief_A: BeliefState,
+        belief_B: BeliefState,
+        trajectory: List[CommutatorResult]
+    ) -> QueryResult:
+        """Build result for exploit mode (converged)."""
+        
+        # Use answer from operator with higher score
+        final_comm = trajectory[-1]
+        if final_comm.operator_A_score >= final_comm.operator_B_score:
+            answer = belief_A.answer
+        else:
+            answer = belief_B.answer
+        
+        return QueryResult(
+            answer=answer,
+            confidence=1.0 - final_comm.combined,
+            mode=OutputMode.EXPLOIT,
+            hops_used=len(trajectory),
+            trajectory=trajectory,
+            evidence_A=belief_A.evidence,
+            evidence_B=belief_B.evidence,
+            answer_A=belief_A.answer,
+            answer_B=belief_B.answer,
+            reasoning=f"Operators converged at hop {len(trajectory)} (Δ={final_comm.combined:.3f}). High confidence answer.",
+            operator_scores={
+                "structure_first": final_comm.operator_A_score,
+                "narrative_first": final_comm.operator_B_score
+            }
+        )
+    
+    def _build_adaptive_result(
+        self,
+        query: str,
+        belief_A: BeliefState,
+        belief_B: BeliefState,
+        trajectory: List[CommutatorResult]
+    ) -> QueryResult:
+        """Build result for adaptive mode (partial convergence)."""
+        
+        # Merge answers
+        merged_answer = self.llm.generate_merged_answer(
+            query,
+            belief_A.answer,
+            belief_B.answer,
+            belief_A.evidence,
+            belief_B.evidence
+        )
+        
+        final_comm = trajectory[-1]
+        
+        return QueryResult(
+            answer=merged_answer,
+            confidence=0.7 - final_comm.combined * 0.3,
+            mode=OutputMode.ADAPTIVE,
+            hops_used=len(trajectory),
+            trajectory=trajectory,
+            evidence_A=belief_A.evidence,
+            evidence_B=belief_B.evidence,
+            answer_A=belief_A.answer,
+            answer_B=belief_B.answer,
+            reasoning=f"Partial convergence at hop {len(trajectory)} (Δ={final_comm.combined:.3f}). Merged both perspectives.",
+            operator_scores={
+                "structure_first": final_comm.operator_A_score,
+                "narrative_first": final_comm.operator_B_score
+            }
+        )
+    
+    def _build_explore_result(
+        self,
+        query: str,
+        belief_A: BeliefState,
+        belief_B: BeliefState,
+        trajectory: List[CommutatorResult]
+    ) -> QueryResult:
+        """Build result for explore mode (high divergence)."""
+        
+        final_comm = trajectory[-1]
+        
+        # Generate dual hypothesis
+        dual_answer = self.llm.generate_dual_hypothesis(
+            query,
+            belief_A.answer,
+            belief_B.answer,
+            final_comm.combined
+        )
+        
+        return QueryResult(
+            answer=dual_answer,
+            confidence=0.3,
+            mode=OutputMode.EXPLORE,
+            hops_used=len(trajectory),
+            trajectory=trajectory,
+            evidence_A=belief_A.evidence,
+            evidence_B=belief_B.evidence,
+            answer_A=belief_A.answer,
+            answer_B=belief_B.answer,
+            reasoning=f"High divergence after {len(trajectory)} hops (Δ={final_comm.combined:.3f}). Structural ambiguity detected.",
+            operator_scores={
+                "structure_first": final_comm.operator_A_score,
+                "narrative_first": final_comm.operator_B_score
+            }
+        )
+    
+    def close(self):
+        """Clean up resources."""
+        self.graph.close()
+```
+
+---
+
+## 6. Visualization and Diagnostics
+
+```python
+def print_trajectory(result: QueryResult):
+    """Print divergence trajectory visualization."""
+    
+    print("\n" + "═" * 70)
+    print("OPMECH-GRAPHRAG QUERY RESULT")
+    print("═" * 70)
+    
+    print(f"\nMode: {result.mode.value.upper()}")
+    print(f"Confidence: {result.confidence:.1%}")
+    print(f"Hops Used: {result.hops_used}")
+    
+    print(f"\n{'─' * 70}")
+    print("DIVERGENCE TRAJECTORY")
+    print(f"{'─' * 70}")
+    
+    print(f"\n{'Hop':<5} {'Δ_E':<8} {'Δ_V':<8} {'Δ_A':<8} {'Δ_C':<8} {'Combined':<10} {'Status'}")
+    print(f"{'─' * 70}")
+    
+    for comm in result.trajectory:
+        # Status indicator
+        if comm.combined < 0.25:
+            status = "✓ EXPLOIT"
+        elif comm.combined > 0.60:
+            status = "✗ EXPLORE"
+        else:
+            status = "○ ADAPTIVE"
+        
+        print(f"{comm.hop:<5} {comm.delta_E:<8.3f} {comm.delta_V:<8.3f} "
+              f"{comm.delta_A:<8.3f} {comm.delta_C:<8.3f} {comm.combined:<10.3f} {status}")
+    
+    # Visual bar chart
+    print(f"\n{'─' * 70}")
+    print("VISUAL TRAJECTORY")
+    print(f"{'─' * 70}")
+    
+    for comm in result.trajectory:
+        bar_len = int(comm.combined * 40)
+        bar = '█' * bar_len + '░' * (40 - bar_len)
+        print(f"Hop {comm.hop}: [{bar}] {comm.combined:.3f}")
+    
+    # Operator scores
+    print(f"\n{'─' * 70}")
+    print("OPERATOR SCORES")
+    print(f"{'─' * 70}")
+    
+    for name, score in result.operator_scores.items():
+        bar_len = int(score * 40)
+        bar = '▓' * bar_len + '░' * (40 - bar_len)
+        print(f"{name:20}: [{bar}] {score:.3f}")
+    
+    # Final answer
+    print(f"\n{'─' * 70}")
+    print("FINAL ANSWER")
+    print(f"{'─' * 70}")
+    print(f"\n{result.answer}")
+    
+    print(f"\n{'─' * 70}")
+    print(f"Reasoning: {result.reasoning}")
+    print("═" * 70)
+
+
+def export_trajectory_json(result: QueryResult, filepath: str):
+    """Export trajectory to JSON for analysis."""
+    import json
+    
+    data = {
+        "mode": result.mode.value,
+        "confidence": result.confidence,
+        "hops_used": result.hops_used,
+        "reasoning": result.reasoning,
+        "operator_scores": result.operator_scores,
+        "trajectory": [
+            {
+                "hop": c.hop,
+                "delta_E": c.delta_E,
+                "delta_V": c.delta_V,
+                "delta_A": c.delta_A,
+                "delta_C": c.delta_C,
+                "combined": c.combined,
+                "operator_A_score": c.operator_A_score,
+                "operator_B_score": c.operator_B_score
+            }
+            for c in result.trajectory
+        ],
+        "answer": result.answer,
+        "answer_A": result.answer_A,
+        "answer_B": result.answer_B
+    }
+    
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=2)
+```
+
+---
+
+## 7. Test Queries
+
+Create a file `test_queries.py` with these test cases:
+
+```python
+TEST_QUERIES = [
+    # Expected: EXPLOIT (low divergence, simple fact)
+    {
+        "query": "What was Apple's total revenue in FY2023?",
+        "expected_mode": "exploit",
+        "expected_hops": "1-2",
+        "notes": "Simple factual query, both operators should find same XBRL data"
+    },
+    
+    # Expected: EXPLORE (high divergence, ambiguous interpretation)
+    {
+        "query": "Is Apple's gross margin pressure cyclical or structural?",
+        "expected_mode": "explore",
+        "expected_hops": "4-6",
+        "notes": "Numbers show decline, narrative emphasizes Services growth - fundamental tension"
+    },
+    
+    # Expected: ADAPTIVE (medium divergence)
+    {
+        "query": "What drove iPhone revenue changes in FY2023?",
+        "expected_mode": "adaptive",
+        "expected_hops": "2-4",
+        "notes": "Both paths find relevant info, slightly different emphasis"
+    },
+    
+    # Expected: EXPLORE (risk assessment ambiguity)
+    {
+        "query": "Are Apple's supply chain risks improving or worsening?",
+        "expected_mode": "explore",
+        "expected_hops": "4-6",
+        "notes": "Risk Factors narrative vs. actual supplier diversity metrics may conflict"
+    },
+    
+    # Expected: EXPLOIT (temporal comparison)
+    {
+        "query": "How did R&D expenses change from FY2022 to FY2023?",
+        "expected_mode": "exploit",
+        "expected_hops": "2-3",
+        "notes": "Clear temporal traversal, both operators should align"
+    },
+    
+    # Expected: ADAPTIVE (causal analysis)
+    {
+        "query": "What factors contributed to Services revenue growth?",
+        "expected_mode": "adaptive",
+        "expected_hops": "3-4",
+        "notes": "Causal edges important, some subjectivity in attribution"
+    },
+    
+    # Expected: EXPLORE (strategic interpretation)
+    {
+        "query": "Is Apple's R&D spending growth-oriented or maintenance-driven?",
+        "expected_mode": "explore",
+        "expected_hops": "4-6",
+        "notes": "Numbers vs. strategic narrative interpretation"
+    },
+    
+    # Expected: EXPLOIT (specific note reference)
+    {
+        "query": "What is Apple's revenue recognition policy?",
+        "expected_mode": "exploit",
+        "expected_hops": "1-2",
+        "notes": "Specific to Note section, both operators should converge"
+    }
+]
+
+
+def run_tests():
+    """Run all test queries and report results."""
+    
+    system = OpMechGraphRAG()
+    results = []
+    
+    for test in TEST_QUERIES:
+        print(f"\n{'='*70}")
+        print(f"QUERY: {test['query']}")
+        print(f"Expected: {test['expected_mode']}, {test['expected_hops']} hops")
+        print(f"{'='*70}")
+        
+        result = system.query(test['query'])
+        
+        # Check if mode matches expectation
+        mode_match = result.mode.value == test['expected_mode']
+        
+        results.append({
+            "query": test['query'],
+            "expected_mode": test['expected_mode'],
+            "actual_mode": result.mode.value,
+            "mode_match": mode_match,
+            "hops_used": result.hops_used,
+            "confidence": result.confidence,
+            "final_divergence": result.trajectory[-1].combined
+        })
+        
+        print_trajectory(result)
+    
+    # Summary
+    print("\n" + "=" * 70)
+    print("TEST SUMMARY")
+    print("=" * 70)
+    
+    correct = sum(1 for r in results if r['mode_match'])
+    print(f"\nMode Accuracy: {correct}/{len(results)} ({correct/len(results):.1%})")
+    
+    for r in results:
+        status = "✓" if r['mode_match'] else "✗"
+        print(f"{status} {r['query'][:50]}... → {r['actual_mode']} (expected {r['expected_mode']})")
+    
+    system.close()
+    return results
+
+
+if __name__ == "__main__":
+    run_tests()
+```
+
+---
+
+## 8. File Structure
+
+Create the following file structure:
+
+```
+src/opmech/
+├── __init__.py
+├── data_classes.py          # Node, Edge, BeliefState, etc.
+├── commutator.py            # Divergence computation
+├── controller.py            # ExploreExploitController
+├── operators.py             # OperatorA, OperatorB
+├── graph_interface.py       # KnowledgeGraphInterface
+├── llm_interface.py         # LLMInterface
+├── system.py                # OpMechGraphRAG main class
+├── visualization.py         # Trajectory visualization
+└── test_queries.py          # Test cases
+
+scripts/
+├── run_opmech.py            # CLI interface
+└── evaluate_opmech.py       # Evaluation script
+```
+
+---
+
+## 9. Run Instructions
+
+```bash
+# 1. Ensure Neo4j is running with the MoE-built graph
+docker start neo4j-container
+
+# 2. Ensure vLLM is running with Qwen2.5-7B
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --port 8000
+
+# 3. Run a single query
+python -c "
+from src.opmech.system import OpMechGraphRAG
+from src.opmech.visualization import print_trajectory
+
+system = OpMechGraphRAG()
+result = system.query('Is Apple\'s margin pressure cyclical or structural?')
+print_trajectory(result)
+system.close()
+"
+
+# 4. Run test suite
+python src/opmech/test_queries.py
+
+# 5. Export results
+python scripts/evaluate_opmech.py --output results/opmech_evaluation.json
+```
+
+---
+
+## 10. Success Criteria
+
+The implementation is successful when:
+
+1. **Commutator correctly computed**: All four components (Δ_E, Δ_V, Δ_A, Δ_C) in [0, 1] range
+2. **Dynamic hopping works**: Simple queries use 1-2 hops, complex queries use 4-6 hops
+3. **Mode selection correct**: At least 6/8 test queries get expected mode
+4. **Confidence calibrated**: Exploit mode > 0.7 confidence, Explore mode < 0.4 confidence
+5. **Trajectory visible**: Clear convergence/divergence patterns in visualization
+6. **Operator scores meaningful**: Higher score correlates with better evidence coverage
+
+---
+
+## Summary: Key Formulas
+
+```
+═══════════════════════════════════════════════════════════════════════════════
+COMMUTATOR (Combined Divergence):
+═══════════════════════════════════════════════════════════════════════════════
+
+Δ(q, h) = 0.30·Δ_E + 0.20·Δ_V + 0.30·Δ_A + 0.20·Δ_C
+
+───────────────────────────────────────────────────────────────────────────────
+EVIDENCE DIVERGENCE (Δ_E):
+───────────────────────────────────────────────────────────────────────────────
+Δ_E = 1 - |E_A ∩ E_B| / |E_A ∪ E_B|
+
+Where E_A, E_B are sets of evidence node IDs from each operator.
+
+───────────────────────────────────────────────────────────────────────────────
+STRUCTURAL DIVERGENCE (Δ_V):
+───────────────────────────────────────────────────────────────────────────────
+Δ_V = 1 - |V_A ∩ V_B| / |V_A ∪ V_B|
+
+Where V = {(section, type, period)} tuples from evidence nodes.
+
+───────────────────────────────────────────────────────────────────────────────
+ANSWER DIVERGENCE (Δ_A):
+───────────────────────────────────────────────────────────────────────────────
+Δ_A = 1 - cos(φ(a_A), φ(a_B))
+
+Where φ is FinBERT embedding function.
+
+───────────────────────────────────────────────────────────────────────────────
+CONFIDENCE DIVERGENCE (Δ_C) - Uses MoE Edge Confidences:
+───────────────────────────────────────────────────────────────────────────────
+Δ_C = 0.6·|μ_A - μ_B| + 0.4·|σ_A - σ_B|/max(σ_A, σ_B, ε)
+
+Where:
+  μ_A = mean(edge_confidences_A)    # Mean confidence of edges in path A
+  μ_B = mean(edge_confidences_B)    # Mean confidence of edges in path B
+  σ_A = std(edge_confidences_A)     # Confidence variance in path A
+  σ_B = std(edge_confidences_B)     # Confidence variance in path B
+  ε = 0.01                          # Small constant
+
+═══════════════════════════════════════════════════════════════════════════════
+PATH CONFIDENCE (For Traversal):
+═══════════════════════════════════════════════════════════════════════════════
+
+path_conf(node) = ∏(edge_i.confidence × decay^hop_i) for edges in path
+
+Where:
+  edge_i.confidence = MoE expert confidence (from CausalChainBuilder, etc.)
+  decay = 0.85-0.95 (prevents over-penalizing long paths)
+  hop_i = hop number when edge was traversed
+
+Example:
+  Seed → Edge(0.9, hop=1) → Node1 → Edge(0.8, hop=2) → Node2
+  path_conf(Node1) = 0.9 × 0.9¹ = 0.81
+  path_conf(Node2) = 0.81 × 0.8 × 0.9² = 0.52
+
+═══════════════════════════════════════════════════════════════════════════════
+EVIDENCE RANKING (Combines Relevance + Confidence):
+═══════════════════════════════════════════════════════════════════════════════
+
+score(node) = relevance_weight × similarity + confidence_weight × path_conf
+
+Where:
+  similarity = cosine(query_embedding, node_embedding)
+  path_conf = path confidence from traversal
+  relevance_weight = 0.5 (exploit) → 0.7 (explore)
+  confidence_weight = 0.5 (exploit) → 0.3 (explore)
+
+In EXPLOIT mode: Equal weight to relevance and confidence
+In EXPLORE mode: Prioritize relevance (accept lower-confidence paths)
+
+═══════════════════════════════════════════════════════════════════════════════
+OPERATOR SCORE:
+═══════════════════════════════════════════════════════════════════════════════
+
+score = mean(edge_conf) × coverage × (0.5 + 0.5·diversity)
+
+Where:
+  mean(edge_conf) = average confidence of traversed edges
+  coverage = min(1, |evidence| / target_k)
+  diversity = unique_sections / total_evidence
+
+═══════════════════════════════════════════════════════════════════════════════
+EXPLORE WEIGHT (Controls All Parameters):
+═══════════════════════════════════════════════════════════════════════════════
+
+w = 0                              if Δ < τ_low (0.25)
+w = (Δ - τ_low)/(τ_high - τ_low)   if τ_low ≤ Δ ≤ τ_high  
+w = 1                              if Δ > τ_high (0.60)
+
+Additional adjustments:
+  if Δ_C > 0.5: w += 0.15          # High confidence disagreement
+  if |score_A - score_B| > 0.3: w = max(w, 0.3)  # Operator score difference
+  if trend > 0.1: w += 0.25        # Divergence increasing
+  if trend < -0.1: w -= 0.15       # Divergence decreasing
+
+═══════════════════════════════════════════════════════════════════════════════
+PARAMETER INTERPOLATION (From Explore Weight):
+═══════════════════════════════════════════════════════════════════════════════
+
+Parameter              | Exploit (w=0) | Explore (w=1) | Formula
+-----------------------|---------------|---------------|------------------
+max_hops               | 2             | 6             | 2 + w×4
+seeds_per_operator     | 3             | 8             | 3 + w×5
+nodes_per_hop          | 5             | 15            | 5 + w×10
+min_edge_confidence    | 0.7           | 0.4           | 0.7 - w×0.3
+top_k_evidence         | 10            | 25            | 10 + w×15
+confidence_decay       | 0.95          | 0.85          | 0.95 - w×0.10
+relevance_weight       | 0.5           | 0.7           | 0.5 + w×0.2
+confidence_weight      | 0.5           | 0.3           | 0.5 - w×0.2
+edge_types             | 2-3 focused   | 6-8 all       | (see code)
+
+═══════════════════════════════════════════════════════════════════════════════
+WHERE EDGE CONFIDENCE IS USED:
+═══════════════════════════════════════════════════════════════════════════════
+
+1. TRAVERSAL FILTERING:
+   - Only traverse edges where confidence >= min_edge_confidence
+   - min_edge_confidence = 0.7 (exploit) → 0.4 (explore)
+
+2. TRAVERSAL PRIORITY:
+   - Confidence-weighted BFS (prefer high-confidence edges)
+   - Edges sorted by confidence DESC in Neo4j query
+
+3. PATH CONFIDENCE:
+   - Accumulated product of edge confidences along path
+   - Used in evidence ranking and operator scoring
+
+4. EVIDENCE RANKING:
+   - Combined score = relevance × similarity + confidence × path_conf
+   - Balances query relevance with path trustworthiness
+
+5. COMMUTATOR Δ_C:
+   - Measures disagreement in confidence between operators
+   - High Δ_C → one path confident, other uncertain → explore more
+
+6. OPERATOR SCORE:
+   - mean(edge_confidences) contributes to operator quality assessment
+   - Used to decide which operator's answer to prefer
+```

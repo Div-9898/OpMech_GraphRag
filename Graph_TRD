@@ -1,0 +1,1519 @@
+
+Technical Requirements Document
+MoE Graph Builder
+Apple Inc. SEC Filings Knowledge Graph
+3-Year 10-K & 10-Q Analysis with Expert-Driven Graph Construction
+Version:	1.1
+Date:	January 2026
+Author:	Divyansh Maiwar Singh
+Status:	Draft for Review
+
+Table of Contents
+1. Executive Summary	1
+1.1 Project Overview	1
+1.2 Scope	1
+2. Related Work	1
+2.1 Financial Knowledge Graphs	1
+2.2 Mixture-of-Experts Architectures	1
+2.3 Graph Connectivity	1
+3. Data Requirements	1
+3.1 Data Source: SEC EDGAR	1
+3.2 Filing Inventory	1
+3.3 Data Extraction Schema	1
+3.3.1 Node Types	1
+3.3.2 Node Schema	1
+3.3.3 Edge Schema	1
+4. Expert Accuracy Requirements	1
+4.1 Expert Performance Targets	1
+4.2 Evaluation Methodology	1
+4.2.1 Gold Standard Creation	1
+4.2.2 Annotation Guidelines	1
+4.2.3 Evaluation Metrics	1
+4.3 Ablation Study Plan	1
+5. System Architecture	1
+5.1 High-Level Architecture	1
+5.2 Component Specifications	1
+5.2.1 Data Ingestion Pipeline	1
+5.2.2 Expert Modules	1
+5.2.3 Expert Algorithm Specifications	1
+5.2.4 Connectivity Enforcer	1
+5.2.5 Graph Storage	1
+6. API Specifications	1
+6.1 REST Endpoints	1
+6.2 WebSocket Endpoints	1
+7. Visualization Requirements	1
+7.1 Technology Selection: Sigma.js	1
+7.2 Visualization Features	1
+7.2.1 Core Features (P0)	1
+7.2.2 Advanced Features (P1)	1
+7.3 Connectivity Visualization	1
+8. Technical Specifications	1
+8.1 Technology Stack	1
+8.2 Hardware Requirements	1
+8.3 Performance Requirements	1
+9. Acceptance Criteria	1
+9.1 Must-Have (P0) - Project Fails Without These	1
+9.2 Should-Have (P1)	1
+9.3 Nice-to-Have (P2)	1
+9.4 Verification Checklist	1
+10. Project Timeline	1
+10.1 Phase Breakdown	1
+10.2 Milestones	1
+11. Risks and Mitigations	1
+12. Appendix	1
+A. SEC Filing Structure Reference	1
+B. Edge Type Definitions	1
+C. Annotation Guidelines	1
+D. Directory Structure	1
+
+
+1. Executive Summary
+1.1 Project Overview
+This document specifies the technical requirements for building a fully-connected knowledge graph from Apple Inc.'s SEC filings using a Mixture-of-Experts (MoE) architecture. The system will ingest 3 years of 10-K and 10-Q filings (FY2022-FY2024), extract entities and relationships using 5 specialized experts, and produce a traversable graph visualized with WebGL.
+
+Primary Success Criteria
+The project succeeds when ALL nodes in the graph are connected and the graph is fully traversable from any node to any other node.
+- 100% graph connectivity (single connected component)
+- Expert accuracy meets or exceeds defined thresholds
+- WebGL visualization renders graph with 10,000+ nodes at 60fps
+- All Apple 10-K and 10-Q filings (2022-2024) successfully processed
+
+1.2 Scope
+In Scope
+- Apple 10-K filings (FY2022, FY2023, FY2024)
+- Apple 10-Q filings (12 quarters)
+- 5 MoE experts with accuracy benchmarks
+- WebGL graph visualization (Sigma.js)
+- Expert accuracy evaluation framework
+- Connectivity verification system
+
+Out of Scope
+- Other companies' filings
+- Real-time filing updates
+- Question-answering system
+- Production deployment
+- Mobile visualization
+- Multi-tenant support
+
+
+2. Related Work
+2.1 Financial Knowledge Graphs
+This project builds upon existing work in financial knowledge graph construction:
+
+- FinKG (Financial Knowledge Graph): Large-scale knowledge graph for financial domain entities and relationships. Our approach differs by focusing on document-level extraction from SEC filings rather than cross-document entity linking.
+
+- SEC-BERT and FinBERT: Domain-specific language models pre-trained on financial text. We leverage FinBERT (ProsusAI/finbert) for embedding generation, which has shown superior performance on financial NLP tasks compared to general-purpose models.
+
+- Edgar-Corpus: Prior work on processing SEC EDGAR filings for NLP tasks. We extend this by building structured knowledge graphs rather than flat text corpora.
+
+2.2 Mixture-of-Experts Architectures
+- Shazeer et al. (2017) - "Outrageously Large Neural Networks": Introduced sparse MoE layers for scaling neural networks. Our architecture adapts this concept to graph construction with specialized experts for different relationship types.
+
+- Switch Transformer (Fedus et al., 2021): Demonstrated efficient routing in MoE systems. While we don't use learned routing, our expert specialization follows similar principles of task decomposition.
+
+- Task-Specific Experts: Unlike traditional MoE where experts are learned, our experts are designed with explicit algorithms for specific relationship types (causal, temporal, semantic).
+
+2.3 Graph Connectivity
+- Graph connectivity algorithms (Tarjan's algorithm, Union-Find) form the basis of our connectivity verification.
+
+- Minimum Spanning Tree approaches inspire our bridge insertion strategy for ensuring full connectivity.
+
+- Force-directed layouts (Fruchterman-Reingold) are used in Sigma.js for graph visualization.
+
+
+3. Data Requirements
+3.1 Data Source: SEC EDGAR
+All filings will be fetched from the SEC EDGAR system using the official SEC API.
+
+SEC EDGAR API Configuration
+Base URL: https://data.sec.gov/submissions/
+Company CIK: 0000320193 (Apple Inc.)
+User-Agent: Required (company email)
+Rate Limit: 10 requests/second
+
+Endpoints:
+  Filings Index: /submissions/CIK{cik}.json
+  Filing Content: /Archives/edgar/data/{cik}/{accession}/
+  XBRL Data: /api/xbrl/companyfacts/CIK{cik}.json
+
+3.2 Filing Inventory
+Type	Period	Filing Date	Accession #	Est. Nodes
+10-K	FY2024	Nov 2024	To be fetched	~400
+10-K	FY2023	Nov 2023	To be fetched	~400
+10-K	FY2022	Oct 2022	To be fetched	~400
+10-Q	Q1-Q3 2024	Various	To be fetched	~200 each
+10-Q	Q1-Q3 2023	Various	To be fetched	~200 each
+10-Q	Q1-Q3 2022	Various	To be fetched	~200 each
+
+Total: 3 10-K filings + 9 10-Q filings = 12 filings
+Estimated total nodes: ~4,200 | Estimated total edges: ~10,000+
+
+3.3 Data Extraction Schema
+3.3.1 Node Types
+Node Type	Description	Source	Count/Filing
+FINANCIAL_LINE	Income, Balance, Cash Flow items	XBRL tags	~100
+TEXT_SECTION	MD&A, Risk Factors paragraphs	HTML parsing	~150
+NOTE	Footnotes to financials	HTML parsing	~30
+TABLE_ROW	Individual table rows	Table extraction	~80
+ENTITY	Companies, products, segments	NER extraction	~40
+
+3.3.2 Node Schema
+Node Data Structure
+@dataclass
+class Node:
+    id: str                  # Unique identifier (format: {filing_id}_{type}_{index})
+    type: NodeType           # FINANCIAL_LINE | TEXT_SECTION | NOTE | TABLE_ROW | ENTITY
+    text: str                # Raw text content (max 2000 chars)
+    embedding: np.ndarray    # 768-dim FinBERT embedding
+    metadata: Dict = {
+        'filing_id': str,    # Which filing this belongs to (e.g., "AAPL-10K-2024")
+        'period': str,       # FY2024, Q1-2024, etc.
+        'section': str,      # Item 1, Item 7, Note 3, etc.
+        'xbrl_tag': str,     # us-gaap:Revenue, etc. (if applicable)
+        'value': float,      # Numeric value (if applicable)
+        'unit': str,         # USD, shares, etc.
+        'source_file': str,  # Original filename
+        'char_offset': int,  # Position in source document
+    }
+
+3.3.3 Edge Schema
+Edge Data Structure
+@dataclass
+class Edge:
+    id: str                  # Unique identifier (format: {source_id}__{edge_type}__{target_id})
+    source_id: str           # Node ID of source
+    target_id: str           # Node ID of target
+    edge_type: EdgeType      # EXPLAINS | REFERS_TO | CAUSED_BY | LEADS_TO |
+                             # TEMPORAL_NEXT | EXPLAINS_LINE_ITEM | DISCUSSES |
+                             # SEMANTICALLY_SIMILAR | BRIDGE
+    confidence: float        # 0.0 - 1.0 confidence score
+    expert: str              # Which expert created this edge
+    evidence: str            # Text snippet supporting this edge (max 500 chars)
+    metadata: Dict = {
+        'created_at': datetime,  # Timestamp of edge creation
+        'filing_id': str,        # Filing where relationship was found
+        'algorithm': str,        # Specific algorithm used (e.g., "regex_pattern_v1")
+        'score_breakdown': Dict, # Component scores if applicable
+    }
+
+
+4. Expert Accuracy Requirements
+Primary Success Metric
+Expert accuracy is the MAIN aspect of this project. Each expert must meet minimum precision and recall thresholds on a manually annotated gold standard test set.
+- Gold standard: 200 manually annotated edges per expert type
+- Evaluation: Precision, Recall, F1-score on held-out test set
+- Threshold: All experts must achieve minimum F1 to pass
+
+4.1 Expert Performance Targets
+Expert	Precision	Recall	F1 Min	F1 Target	Priority
+Cross-Reference Hunter	>= 85%	>= 80%	82%	88%	P0
+Causal Chain Builder	>= 75%	>= 70%	72%	78%	P0
+Temporal Linker	>= 90%	>= 85%	87%	92%	P1
+Table-Text Connector	>= 85%	>= 75%	80%	85%	P1
+Semantic Bridge	>= 70%	N/A*	70%*	75%	P2
+*Semantic Bridge is evaluated on precision only (recall undefined for similarity)
+
+4.2 Evaluation Methodology
+4.2.1 Gold Standard Creation
+Gold Standard Annotation Process
+Step 1: Sample Selection
+  - Select 2 10-K filings (FY2023, FY2024) for annotation
+  - Extract all nodes from selected filings
+  - Stratified sampling across node types
+
+Step 2: Expert-Specific Annotation
+  - Cross-Reference: Annotate 200 reference pairs (100 pos, 100 neg)
+  - Causal: Annotate 200 causal relationships (100 pos, 100 neg)
+  - Temporal: Annotate 200 temporal links (100 pos, 100 neg)
+  - Table-Text: Annotate 200 alignments (100 pos, 100 neg)
+  - Semantic: Annotate 200 similarity pairs with 1-5 score
+
+Step 3: Inter-Annotator Agreement
+  - Two annotators per expert type
+  - At least one annotator with finance/accounting background
+  - Required Cohen's Kappa > 0.7
+  - Resolve disagreements via third annotator adjudication
+
+4.2.2 Annotation Guidelines
+See Appendix C for detailed annotation guidelines including:
+- Definition of each edge type with examples
+- Edge cases and how to handle ambiguity
+- Negative example criteria
+- Confidence scoring rubric
+
+4.2.3 Evaluation Metrics
+Evaluation Formulas
+Precision = TP / (TP + FP)
+  - What fraction of predicted edges are correct?
+
+Recall = TP / (TP + FN)
+  - What fraction of true edges were found?
+
+F1 = 2 * (Precision * Recall) / (Precision + Recall)
+  - Harmonic mean of precision and recall
+
+Confidence Calibration:
+  - Predicted confidence should match actual accuracy
+  - Expected: conf=0.9 edges should be correct ~90% of time
+  - Calibration error = mean(|confidence - accuracy|) per bucket
+
+4.3 Ablation Study Plan
+To validate the contribution of each expert, conduct the following ablation studies:
+
+Ablation Study Design
+Baseline: Single embedding-only approach
+  - Connect nodes purely by cosine similarity (threshold 0.85)
+  - Measure: connectivity %, precision, edge count
+
+Ablation 1: Remove Each Expert
+  For each expert E in [CrossRef, Causal, Temporal, TableText, Semantic]:
+    - Build graph without expert E
+    - Measure: connectivity %, F1 impact, bridge edges needed
+    - Report: contribution score = (full_graph_F1 - ablated_F1)
+
+Ablation 2: Threshold Sensitivity
+  For similarity_threshold in [0.7, 0.75, 0.8, 0.85, 0.9, 0.95]:
+    - Build Semantic Bridge edges at threshold
+    - Measure: precision, edge count, connectivity impact
+
+Ablation 3: Expert Combination Analysis
+  - Test all 2^5 - 1 = 31 expert combinations
+  - Identify minimum expert set for 100% connectivity
+  - Report Pareto frontier of (expert_count, F1_score)
+
+
+5. System Architecture
+5.1 High-Level Architecture
+System Components
++-----------------------------------------------------------------------+
+|                        MoE Graph Builder System                        |
++------------------------------------------------------------------------+
+|                                                                        |
+|  +--------------+    +--------------+    +--------------+              |
+|  | SEC EDGAR    |--->| Data Ingestion|--->| Node         |              |
+|  | Fetcher      |    | Pipeline     |    | Extractor    |              |
+|  +--------------+    +--------------+    +------+-------+              |
+|                                                 |                       |
+|                                                 v                       |
+|  +--------------------------------------------------------------+      |
+|  |                    MoE Expert Ensemble                        |      |
+|  |  +---------+ +---------+ +---------+ +---------+ +---------+  |      |
+|  |  |CrossRef | | Causal  | |Temporal | |Tab-Text | |Semantic |  |      |
+|  |  | Expert  | | Expert  | | Expert  | | Expert  | | Expert  |  |      |
+|  |  +----+----+ +----+----+ +----+----+ +----+----+ +----+----+  |      |
+|  +-------+----------+----------+----------+----------+----------+      |
+|                                |                                        |
+|                                v                                        |
+|  +--------------+    +--------------+    +--------------+              |
+|  | Graph Merger |--->| Connectivity |--->| Neo4j        |              |
+|  | & Dedup      |    | Enforcer     |    | Storage      |              |
+|  +--------------+    +--------------+    +------+-------+              |
+|                                                 |                       |
+|                                                 v                       |
+|  +--------------+    +--------------+    +--------------+              |
+|  | Accuracy     |    | WebGL Viz    |<---| API Server   |              |
+|  | Evaluator    |    | (Sigma.js)   |    | (FastAPI)    |              |
+|  +--------------+    +--------------+    +--------------+              |
+|                                                                        |
++------------------------------------------------------------------------+
+
+5.2 Component Specifications
+5.2.1 Data Ingestion Pipeline
+Component	Technology	Responsibility
+SEC Fetcher	Python + requests	Download 10-K/10-Q from EDGAR
+HTML Parser	BeautifulSoup4	Extract sections, tables, notes
+XBRL Processor	arelle / python-xbrl	Extract financial line items
+Text Chunker	Custom (semantic)	Split MD&A into paragraphs
+Embedding Engine	FinBERT (HuggingFace)	Generate 768-dim embeddings
+
+Error Handling Strategy
+SEC API Error Handling:
+  - Retry with exponential backoff: 3 attempts at 2s, 4s, 8s delays
+  - On persistent failure: log error, skip filing, continue pipeline
+  - Rate limiting: implement token bucket (10 req/sec max)
+
+XBRL Parsing Fallback:
+  - Primary: arelle XBRL processor
+  - Fallback 1: python-xbrl library
+  - Fallback 2: HTML table extraction with pandas read_html()
+  - Fallback 3: Manual regex extraction for common XBRL tags
+
+Validation:
+  - Verify node count within expected range (+-20%)
+  - Check embedding dimensions = 768
+  - Validate metadata fields not null
+
+Caching Strategy
+Directory Structure:
+data/
+├── raw/                    # Original SEC filings
+│   └── {cik}/
+│       └── {accession}/
+│           ├── filing.html
+│           ├── filing.xml (XBRL)
+│           └── metadata.json
+├── parsed/                 # Extracted nodes as JSON
+│   └── {filing_id}/
+│       ├── nodes.jsonl
+│       └── extraction_log.json
+├── embeddings/             # Pre-computed FinBERT vectors
+│   └── {filing_id}/
+│       └── embeddings.npy
+├── gold/                   # Gold standard annotations
+│   └── {expert_type}/
+│       ├── annotations.jsonl
+│       └── annotator_agreement.json
+└── graph/                  # Neo4j export snapshots
+    └── {timestamp}/
+        ├── nodes.csv
+        └── edges.csv
+
+5.2.2 Expert Modules
+Expert Module Interface
+from abc import ABC, abstractmethod
+from typing import List, Dict, Tuple
+from dataclasses import dataclass
+
+class BaseExpert(ABC):
+    """Abstract base class for all experts."""
+
+    def __init__(self, config: Dict):
+        self.config = config
+        self.name = self.__class__.__name__
+
+    @abstractmethod
+    def discover_edges(
+        self,
+        nodes: List[Node],
+        embeddings: Dict[str, np.ndarray]
+    ) -> List[Edge]:
+        """
+        Discover edges of this expert's type.
+
+        Args:
+            nodes: List of all nodes in the graph
+            embeddings: Dict mapping node_id -> embedding vector
+
+        Returns:
+            List of discovered edges with confidence scores
+        """
+        pass
+
+    @abstractmethod
+    def evaluate(
+        self,
+        predictions: List[Edge],
+        gold: List[Edge]
+    ) -> Metrics:
+        """
+        Evaluate expert on gold standard.
+
+        Args:
+            predictions: Predicted edges
+            gold: Gold standard edges
+
+        Returns:
+            Metrics object with precision, recall, F1
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def edge_types(self) -> List[str]:
+        """Return edge types this expert discovers."""
+        pass
+
+    def get_confidence_threshold(self) -> float:
+        """Minimum confidence to emit an edge."""
+        return self.config.get('confidence_threshold', 0.5)
+
+@dataclass
+class Metrics:
+    precision: float
+    recall: float
+    f1: float
+    true_positives: int
+    false_positives: int
+    false_negatives: int
+    confidence_calibration: float
+
+5.2.3 Expert Algorithm Specifications
+
+Expert 1: Cross-Reference Hunter
+Purpose: Detect explicit references between document sections
+
+class CrossReferenceHunter(BaseExpert):
+    """
+    Detects explicit cross-references in SEC filings.
+    Examples: "See Note 3", "as discussed in Item 7", "refer to Part II"
+    """
+
+    # Regex patterns for reference detection
+    REFERENCE_PATTERNS = [
+        r'[Ss]ee\s+Note\s+(\d+)',
+        r'[Ss]ee\s+Item\s+(\d+[A-Z]?)',
+        r'[Rr]efer\s+to\s+(?:the\s+)?(.+?)\s+(?:section|discussion)',
+        r'[Aa]s\s+(?:discussed|described|noted)\s+in\s+(.+?)(?:\.|,)',
+        r'[Ss]ee\s+(?:the\s+)?[""](.+?)[""]',
+        r'Part\s+(I{1,3}|IV),?\s+Item\s+(\d+)',
+        r'[Dd]escribed\s+(?:below|above)\s+(?:in|under)\s+[""]?(.+?)[""]?',
+    ]
+
+    def discover_edges(self, nodes, embeddings):
+        edges = []
+
+        for source_node in nodes:
+            if source_node.type not in [NodeType.TEXT_SECTION, NodeType.NOTE]:
+                continue
+
+            # Find all reference patterns in source text
+            for pattern in self.REFERENCE_PATTERNS:
+                matches = re.finditer(pattern, source_node.text)
+                for match in matches:
+                    reference_target = match.group(1)
+
+                    # Find target node that matches the reference
+                    target_node = self._resolve_reference(
+                        reference_target,
+                        nodes,
+                        source_node.metadata['filing_id']
+                    )
+
+                    if target_node:
+                        confidence = self._calculate_confidence(
+                            source_node, target_node, match
+                        )
+                        edges.append(Edge(
+                            source_id=source_node.id,
+                            target_id=target_node.id,
+                            edge_type=EdgeType.REFERS_TO,
+                            confidence=confidence,
+                            expert=self.name,
+                            evidence=match.group(0)
+                        ))
+
+        return self._deduplicate(edges)
+
+    def _resolve_reference(self, ref_text, nodes, filing_id):
+        """Match reference text to actual node."""
+        # Exact match on section/note number
+        # Fuzzy match on section titles
+        # Return highest confidence match
+        pass
+
+    def _calculate_confidence(self, source, target, match):
+        """
+        Confidence based on:
+        - Pattern specificity (exact note number = 0.95, fuzzy = 0.7)
+        - Same filing bonus (+0.05)
+        - Section proximity bonus
+        """
+        pass
+
+    @property
+    def edge_types(self):
+        return [EdgeType.REFERS_TO, EdgeType.EXPLAINS]
+
+Expert 2: Causal Chain Builder
+Purpose: Identify cause-effect relationships in financial narratives
+
+class CausalChainBuilder(BaseExpert):
+    """
+    Identifies causal relationships in financial text.
+    Examples: "Revenue increased due to iPhone sales"
+              "Operating expenses rose, resulting in lower margins"
+    """
+
+    # Causal connectors with directionality
+    CAUSAL_FORWARD = [  # A leads to B
+        r'resulted\s+in', r'led\s+to', r'caused', r'drove',
+        r'contributed\s+to', r'increased.*(?:due\s+to|because)',
+        r'therefore', r'consequently', r'as\s+a\s+result',
+    ]
+
+    CAUSAL_BACKWARD = [  # B caused by A
+        r'due\s+to', r'because\s+of', r'driven\s+by',
+        r'attributed\s+to', r'as\s+a\s+result\s+of',
+        r'resulting\s+from', r'caused\s+by',
+    ]
+
+    def discover_edges(self, nodes, embeddings):
+        edges = []
+
+        # Strategy 1: Pattern-based detection within sentences
+        for node in nodes:
+            if node.type != NodeType.TEXT_SECTION:
+                continue
+
+            sentences = self._split_sentences(node.text)
+            for sent in sentences:
+                causal_edges = self._extract_causal_from_sentence(
+                    sent, node, nodes, embeddings
+                )
+                edges.extend(causal_edges)
+
+        # Strategy 2: Cross-node causal inference using dependency parsing
+        edges.extend(self._dependency_parse_causals(nodes))
+
+        # Strategy 3: LLM-based extraction for complex cases (optional)
+        if self.config.get('use_llm', False):
+            edges.extend(self._llm_extract_causals(nodes))
+
+        return self._deduplicate_and_filter(edges)
+
+    def _extract_causal_from_sentence(self, sentence, source_node, nodes, embeddings):
+        """Extract causal relations from a single sentence."""
+        edges = []
+
+        # Check for causal patterns
+        for pattern in self.CAUSAL_FORWARD:
+            if re.search(pattern, sentence, re.IGNORECASE):
+                # Parse sentence to find cause and effect spans
+                cause, effect = self._parse_cause_effect(sentence, pattern)
+
+                # Find nodes that match cause and effect
+                cause_node = self._find_matching_node(cause, nodes, embeddings)
+                effect_node = self._find_matching_node(effect, nodes, embeddings)
+
+                if cause_node and effect_node:
+                    edges.append(Edge(
+                        source_id=cause_node.id,
+                        target_id=effect_node.id,
+                        edge_type=EdgeType.LEADS_TO,
+                        confidence=0.75,
+                        expert=self.name,
+                        evidence=sentence[:500]
+                    ))
+
+        return edges
+
+    def _dependency_parse_causals(self, nodes):
+        """Use spaCy dependency parsing for causal extraction."""
+        import spacy
+        nlp = spacy.load('en_core_web_lg')
+        # Parse and extract nsubj -> verb -> dobj patterns
+        # with causal verbs
+        pass
+
+    @property
+    def edge_types(self):
+        return [EdgeType.CAUSED_BY, EdgeType.LEADS_TO]
+
+Expert 3: Temporal Linker
+Purpose: Connect same entities/metrics across time periods
+
+class TemporalLinker(BaseExpert):
+    """
+    Links the same financial items across time periods.
+    Examples: Revenue FY2022 -> Revenue FY2023 -> Revenue FY2024
+              Risk Factor about China in Q1 -> same topic in Q2
+    """
+
+    def discover_edges(self, nodes, embeddings):
+        edges = []
+
+        # Strategy 1: XBRL tag matching across periods
+        edges.extend(self._link_by_xbrl_tag(nodes))
+
+        # Strategy 2: Note number matching across filings
+        edges.extend(self._link_by_note_number(nodes))
+
+        # Strategy 3: High-similarity text across periods
+        edges.extend(self._link_by_embedding_similarity(nodes, embeddings))
+
+        return edges
+
+    def _link_by_xbrl_tag(self, nodes):
+        """Link nodes with same XBRL tag across periods."""
+        edges = []
+
+        # Group nodes by XBRL tag
+        tag_groups = defaultdict(list)
+        for node in nodes:
+            if node.type == NodeType.FINANCIAL_LINE:
+                tag = node.metadata.get('xbrl_tag')
+                if tag:
+                    tag_groups[tag].append(node)
+
+        # Create temporal edges within each group
+        for tag, group_nodes in tag_groups.items():
+            # Sort by period
+            sorted_nodes = sorted(group_nodes, key=lambda n: n.metadata['period'])
+
+            for i in range(len(sorted_nodes) - 1):
+                edges.append(Edge(
+                    source_id=sorted_nodes[i].id,
+                    target_id=sorted_nodes[i + 1].id,
+                    edge_type=EdgeType.TEMPORAL_NEXT,
+                    confidence=0.95,  # High confidence for exact XBRL match
+                    expert=self.name,
+                    evidence=f"Same XBRL tag: {tag}"
+                ))
+
+        return edges
+
+    def _link_by_embedding_similarity(self, nodes, embeddings):
+        """Link high-similarity nodes across different periods."""
+        edges = []
+        SIMILARITY_THRESHOLD = 0.90  # High threshold for temporal links
+
+        # Group nodes by type and filing
+        for node_type in NodeType:
+            type_nodes = [n for n in nodes if n.type == node_type]
+
+            # Compare nodes from different periods
+            for i, node1 in enumerate(type_nodes):
+                for node2 in type_nodes[i+1:]:
+                    # Must be different periods
+                    if node1.metadata['period'] == node2.metadata['period']:
+                        continue
+
+                    # Calculate similarity
+                    sim = cosine_similarity(
+                        embeddings[node1.id],
+                        embeddings[node2.id]
+                    )
+
+                    if sim >= SIMILARITY_THRESHOLD:
+                        # Determine temporal order
+                        if node1.metadata['period'] < node2.metadata['period']:
+                            src, tgt = node1, node2
+                        else:
+                            src, tgt = node2, node1
+
+                        edges.append(Edge(
+                            source_id=src.id,
+                            target_id=tgt.id,
+                            edge_type=EdgeType.TEMPORAL_NEXT,
+                            confidence=float(sim),
+                            expert=self.name,
+                            evidence=f"Embedding similarity: {sim:.3f}"
+                        ))
+
+        return edges
+
+    @property
+    def edge_types(self):
+        return [EdgeType.TEMPORAL_NEXT]
+
+Expert 4: Table-Text Connector
+Purpose: Link table data to explanatory text
+
+class TableTextConnector(BaseExpert):
+    """
+    Connects table rows to text that explains them.
+    Examples: Table showing revenue by segment <-> MD&A discussing segment performance
+              Balance sheet line item <-> Note explaining the item
+    """
+
+    SIMILARITY_THRESHOLD = 0.80
+    NUMERIC_MATCH_TOLERANCE = 0.05  # 5% tolerance for numeric matching
+
+    def discover_edges(self, nodes, embeddings):
+        edges = []
+
+        # Get table nodes and text nodes
+        table_nodes = [n for n in nodes if n.type in
+                       [NodeType.TABLE_ROW, NodeType.FINANCIAL_LINE]]
+        text_nodes = [n for n in nodes if n.type in
+                      [NodeType.TEXT_SECTION, NodeType.NOTE]]
+
+        for table_node in table_nodes:
+            # Strategy 1: Numeric value matching
+            if table_node.metadata.get('value'):
+                text_matches = self._find_numeric_matches(
+                    table_node, text_nodes
+                )
+                edges.extend(text_matches)
+
+            # Strategy 2: Embedding similarity
+            sim_matches = self._find_similar_text(
+                table_node, text_nodes, embeddings
+            )
+            edges.extend(sim_matches)
+
+            # Strategy 3: XBRL tag to Note reference
+            if table_node.metadata.get('xbrl_tag'):
+                note_matches = self._find_note_references(
+                    table_node, text_nodes
+                )
+                edges.extend(note_matches)
+
+        return self._deduplicate(edges)
+
+    def _find_numeric_matches(self, table_node, text_nodes):
+        """Find text nodes mentioning similar numeric values."""
+        edges = []
+        target_value = table_node.metadata['value']
+
+        for text_node in text_nodes:
+            # Extract numbers from text
+            numbers = re.findall(r'\$?([\d,]+(?:\.\d+)?)\s*(?:million|billion)?',
+                                 text_node.text)
+
+            for num_str in numbers:
+                try:
+                    num = float(num_str.replace(',', ''))
+                    # Check for match within tolerance
+                    if abs(num - target_value) / target_value <= self.NUMERIC_MATCH_TOLERANCE:
+                        edges.append(Edge(
+                            source_id=text_node.id,
+                            target_id=table_node.id,
+                            edge_type=EdgeType.EXPLAINS_LINE_ITEM,
+                            confidence=0.85,
+                            expert=self.name,
+                            evidence=f"Numeric match: {num_str}"
+                        ))
+                except ValueError:
+                    continue
+
+        return edges
+
+    def _find_similar_text(self, table_node, text_nodes, embeddings):
+        """Find semantically similar text nodes."""
+        edges = []
+        table_emb = embeddings[table_node.id]
+
+        for text_node in text_nodes:
+            sim = cosine_similarity(table_emb, embeddings[text_node.id])
+
+            if sim >= self.SIMILARITY_THRESHOLD:
+                edges.append(Edge(
+                    source_id=text_node.id,
+                    target_id=table_node.id,
+                    edge_type=EdgeType.DISCUSSES,
+                    confidence=float(sim),
+                    expert=self.name,
+                    evidence=f"Semantic similarity: {sim:.3f}"
+                ))
+
+        return edges
+
+    @property
+    def edge_types(self):
+        return [EdgeType.EXPLAINS_LINE_ITEM, EdgeType.DISCUSSES]
+
+Expert 5: Semantic Bridge
+Purpose: Connect semantically similar content and ensure connectivity
+
+class SemanticBridge(BaseExpert):
+    """
+    Creates edges between semantically similar nodes.
+    Also serves as fallback to ensure graph connectivity.
+    """
+
+    SIMILARITY_THRESHOLD = 0.85      # For SEMANTICALLY_SIMILAR edges
+    BRIDGE_THRESHOLD = 0.70          # Lower threshold for connectivity bridges
+
+    def discover_edges(self, nodes, embeddings):
+        edges = []
+
+        # Strategy 1: High-similarity pairs (same filing)
+        edges.extend(self._find_similar_pairs_within_filing(nodes, embeddings))
+
+        # Strategy 2: Cross-filing similarity (for related topics)
+        edges.extend(self._find_cross_filing_similar(nodes, embeddings))
+
+        return edges
+
+    def _find_similar_pairs_within_filing(self, nodes, embeddings):
+        """Find semantically similar nodes within same filing."""
+        edges = []
+
+        # Group by filing
+        filing_groups = defaultdict(list)
+        for node in nodes:
+            filing_groups[node.metadata['filing_id']].append(node)
+
+        for filing_id, filing_nodes in filing_groups.items():
+            # Compare all pairs (with early stopping for efficiency)
+            for i, node1 in enumerate(filing_nodes):
+                for node2 in filing_nodes[i+1:]:
+                    # Skip if same type and adjacent (likely already connected)
+                    if (node1.type == node2.type and
+                        abs(node1.metadata.get('char_offset', 0) -
+                            node2.metadata.get('char_offset', 0)) < 1000):
+                        continue
+
+                    sim = cosine_similarity(
+                        embeddings[node1.id],
+                        embeddings[node2.id]
+                    )
+
+                    if sim >= self.SIMILARITY_THRESHOLD:
+                        edges.append(Edge(
+                            source_id=node1.id,
+                            target_id=node2.id,
+                            edge_type=EdgeType.SEMANTICALLY_SIMILAR,
+                            confidence=float(sim),
+                            expert=self.name,
+                            evidence=f"Cosine similarity: {sim:.3f}"
+                        ))
+
+        return edges
+
+    def _find_cross_filing_similar(self, nodes, embeddings):
+        """Find similar nodes across different filings."""
+        # Similar to above but across filings
+        # Used for connecting related topics across time
+        pass
+
+    @property
+    def edge_types(self):
+        return [EdgeType.SEMANTICALLY_SIMILAR, EdgeType.BRIDGE]
+
+5.2.4 Connectivity Enforcer
+Purpose: Guarantee single connected component
+
+class ConnectivityEnforcer:
+    """
+    Ensures the graph is fully connected (single component).
+    Adds minimal BRIDGE edges to connect disconnected components.
+    """
+
+    BRIDGE_SIMILARITY_THRESHOLD = 0.70
+
+    def enforce_connectivity(
+        self,
+        nodes: List[Node],
+        edges: List[Edge],
+        embeddings: Dict[str, np.ndarray]
+    ) -> List[Edge]:
+        """
+        Add bridge edges to ensure single connected component.
+
+        Algorithm:
+        1. Find all connected components
+        2. While more than 1 component exists:
+           a. Find best edge to connect two components
+           b. Add edge and merge components
+        3. Return list of added bridge edges
+
+        Returns:
+            List of BRIDGE edges added to ensure connectivity
+        """
+        # Build adjacency list
+        adj = defaultdict(set)
+        for edge in edges:
+            adj[edge.source_id].add(edge.target_id)
+            adj[edge.target_id].add(edge.source_id)
+
+        # Find connected components using Union-Find
+        components = self._find_components(nodes, adj)
+
+        bridge_edges = []
+
+        while len(components) > 1:
+            best_edge = None
+            best_score = 0
+            best_pair = None
+
+            # Find best edge to connect any two components
+            for i, comp1 in enumerate(components):
+                for comp2 in components[i+1:]:
+                    # Find most similar node pair across components
+                    for node1_id in comp1:
+                        for node2_id in comp2:
+                            sim = cosine_similarity(
+                                embeddings[node1_id],
+                                embeddings[node2_id]
+                            )
+                            if sim > best_score:
+                                best_score = sim
+                                best_edge = Edge(
+                                    id=f"{node1_id}__BRIDGE__{node2_id}",
+                                    source_id=node1_id,
+                                    target_id=node2_id,
+                                    edge_type=EdgeType.BRIDGE,
+                                    confidence=float(sim),
+                                    expert="ConnectivityEnforcer",
+                                    evidence=f"Bridge edge (similarity: {sim:.3f})"
+                                )
+                                best_pair = (i, components.index(comp2))
+
+            if best_edge and best_score >= self.BRIDGE_SIMILARITY_THRESHOLD:
+                bridge_edges.append(best_edge)
+
+                # Merge components
+                merged = components[best_pair[0]] | components[best_pair[1]]
+                components = [c for j, c in enumerate(components)
+                             if j not in best_pair]
+                components.append(merged)
+            else:
+                # Force connection even below threshold (last resort)
+                if best_edge:
+                    best_edge.metadata['forced'] = True
+                    best_edge.confidence = max(0.5, best_score)
+                    bridge_edges.append(best_edge)
+
+                    merged = components[best_pair[0]] | components[best_pair[1]]
+                    components = [c for j, c in enumerate(components)
+                                 if j not in best_pair]
+                    components.append(merged)
+
+        return bridge_edges
+
+    def _find_components(self, nodes, adj):
+        """Find connected components using BFS."""
+        visited = set()
+        components = []
+
+        for node in nodes:
+            if node.id not in visited:
+                component = set()
+                queue = [node.id]
+
+                while queue:
+                    current = queue.pop(0)
+                    if current in visited:
+                        continue
+                    visited.add(current)
+                    component.add(current)
+
+                    for neighbor in adj[current]:
+                        if neighbor not in visited:
+                            queue.append(neighbor)
+
+                components.append(component)
+
+        return components
+
+    def verify_connectivity(self, nodes: List[Node], edges: List[Edge]) -> Dict:
+        """
+        Verify graph connectivity and return metrics.
+
+        Returns:
+            Dict with connectivity statistics
+        """
+        adj = defaultdict(set)
+        for edge in edges:
+            adj[edge.source_id].add(edge.target_id)
+            adj[edge.target_id].add(edge.source_id)
+
+        components = self._find_components(nodes, adj)
+
+        # Calculate metrics
+        isolated = [n.id for n in nodes if n.id not in adj or len(adj[n.id]) == 0]
+        degrees = [len(adj[n.id]) for n in nodes]
+
+        return {
+            'connected_components': len(components),
+            'is_connected': len(components) == 1,
+            'total_nodes': len(nodes),
+            'total_edges': len(edges),
+            'isolated_nodes': len(isolated),
+            'isolated_node_ids': isolated[:10],  # First 10 for debugging
+            'average_degree': sum(degrees) / len(degrees) if degrees else 0,
+            'max_degree': max(degrees) if degrees else 0,
+            'min_degree': min(degrees) if degrees else 0,
+            'largest_component_size': max(len(c) for c in components) if components else 0,
+            'bridge_edges': len([e for e in edges if e.edge_type == EdgeType.BRIDGE]),
+        }
+
+5.2.5 Graph Storage
+Neo4j Schema
+// Node labels
+(:FinancialLine {id, text, xbrl_tag, value, unit, period, filing_id})
+(:TextSection {id, text, section, period, filing_id})
+(:Note {id, text, note_number, period, filing_id})
+(:TableRow {id, text, table_id, row_index, period, filing_id})
+(:Entity {id, name, entity_type, period, filing_id})
+
+// Edge types (with confidence and expert source)
+-[:EXPLAINS {confidence, expert, evidence}]->
+-[:REFERS_TO {confidence, expert, evidence}]->
+-[:CAUSED_BY {confidence, expert, evidence}]->
+-[:LEADS_TO {confidence, expert, evidence}]->
+-[:TEMPORAL_NEXT {confidence, expert, evidence}]->
+-[:EXPLAINS_LINE_ITEM {confidence, expert, evidence}]->
+-[:DISCUSSES {confidence, expert, evidence}]->
+-[:SEMANTICALLY_SIMILAR {confidence, expert, evidence}]->
+-[:BRIDGE {confidence, expert, evidence, forced}]->
+
+// Indexes for performance
+CREATE INDEX node_id FOR (n:Node) ON (n.id);
+CREATE INDEX node_filing FOR (n:Node) ON (n.filing_id);
+CREATE INDEX node_period FOR (n:Node) ON (n.period);
+CREATE INDEX node_type FOR (n:Node) ON (n.type);
+
+
+6. API Specifications
+6.1 REST Endpoints
+Endpoint	Method	Description	Response
+/api/health	GET	Health check	{"status": "ok"}
+/api/graph	GET	Full graph (nodes + edges)	{nodes: [], edges: []}
+/api/graph/stats	GET	Connectivity metrics	{components: 1, nodes: 4247, ...}
+/api/nodes	GET	List nodes with pagination	{nodes: [], total: N, page: P}
+/api/nodes/{id}	GET	Single node details	{node: {...}}
+/api/edges	GET	List edges with pagination	{edges: [], total: N}
+/api/path	GET	Shortest path between nodes	{path: [node_ids], length: N}
+/api/filter	POST	Filter graph by criteria	{nodes: [], edges: []}
+/api/search	GET	Search nodes by text	{results: [], total: N}
+/api/experts	GET	Expert statistics	{experts: [{name, edge_count, f1}]}
+/api/export	GET	Export graph (CSV/JSON)	File download
+
+API Request/Response Examples
+# Get graph statistics
+GET /api/graph/stats
+Response:
+{
+  "connected_components": 1,
+  "total_nodes": 4247,
+  "total_edges": 10892,
+  "average_degree": 5.13,
+  "isolated_nodes": 0,
+  "bridge_edges": 12,
+  "nodes_by_type": {
+    "FINANCIAL_LINE": 1200,
+    "TEXT_SECTION": 1800,
+    "NOTE": 360,
+    "TABLE_ROW": 480,
+    "ENTITY": 407
+  },
+  "edges_by_expert": {
+    "CrossReferenceHunter": 2340,
+    "CausalChainBuilder": 1560,
+    "TemporalLinker": 1800,
+    "TableTextConnector": 2890,
+    "SemanticBridge": 2290,
+    "ConnectivityEnforcer": 12
+  }
+}
+
+# Find shortest path
+GET /api/path?from=AAPL-10K-2024_FL_001&to=AAPL-10K-2022_TS_150
+Response:
+{
+  "path": [
+    "AAPL-10K-2024_FL_001",
+    "AAPL-10K-2024_TS_045",
+    "AAPL-10K-2023_TS_044",
+    "AAPL-10K-2022_TS_150"
+  ],
+  "length": 3,
+  "edges": [
+    {"type": "EXPLAINS_LINE_ITEM", "confidence": 0.89},
+    {"type": "TEMPORAL_NEXT", "confidence": 0.95},
+    {"type": "SEMANTICALLY_SIMILAR", "confidence": 0.87}
+  ]
+}
+
+# Filter graph
+POST /api/filter
+Body:
+{
+  "node_types": ["FINANCIAL_LINE", "TEXT_SECTION"],
+  "periods": ["FY2024", "FY2023"],
+  "experts": ["CausalChainBuilder"],
+  "min_confidence": 0.8
+}
+
+6.2 WebSocket Endpoints
+WebSocket API
+# Real-time graph construction updates
+WS /api/ws/graph/stream
+
+# Client subscribes to updates during graph building
+{
+  "type": "subscribe",
+  "events": ["node_added", "edge_added", "component_merged", "progress"]
+}
+
+# Server pushes events
+{
+  "type": "progress",
+  "data": {
+    "phase": "expert_inference",
+    "expert": "CausalChainBuilder",
+    "progress": 0.45,
+    "nodes_processed": 2100,
+    "edges_discovered": 780
+  }
+}
+
+{
+  "type": "component_merged",
+  "data": {
+    "components_remaining": 3,
+    "bridge_edge": {
+      "source": "...",
+      "target": "...",
+      "confidence": 0.72
+    }
+  }
+}
+
+
+7. Visualization Requirements
+Visualization Goal
+Create an interactive WebGL-based graph visualization that demonstrates full graph connectivity and allows exploration of the knowledge graph.
+- Technology: Sigma.js with WebGL renderer
+- Performance: 10,000+ nodes at 60fps
+- Interactivity: Zoom, pan, search, filter, path highlighting
+
+7.1 Technology Selection: Sigma.js
+Library	Pros	Cons
+Sigma.js (selected)	WebGL native, 100k nodes, great API	Steeper learning curve
+vis.js	Easy to use, good docs	Canvas-based, 5k node limit
+Cytoscape.js	Feature-rich, analysis tools	Slow with >10k nodes
+D3.js	Highly customizable	Manual WebGL, complex
+
+7.2 Visualization Features
+7.2.1 Core Features (P0)
+Feature	Description	Acceptance
+Graph Rendering	Display all nodes and edges with WebGL	60fps @ 10k nodes
+Node Coloring	Color by node type (5 distinct colors)	Clear distinction
+Edge Coloring	Color by edge type / expert source	8 distinct colors
+Zoom & Pan	Smooth zoom (0.1x - 10x), pan navigation	No lag
+Node Search	Search by ID, text content, or metadata	< 100ms response
+Connectivity Check	Visual indicator showing 1 component	Green checkmark
+
+7.2.2 Advanced Features (P1)
+Feature	Description	Acceptance
+Path Highlighting	Show shortest path between 2 nodes	Dijkstra < 50ms
+Expert Filter	Toggle visibility by expert source	Instant update
+Time Filter	Filter by fiscal period (2022-2024)	Slider control
+Node Details	Click node to see full content	Side panel
+Layout Algorithms	Force-directed, hierarchical, radial	3 options
+Export	Export visible graph as PNG/SVG	High-res output
+
+7.3 Connectivity Visualization
+Connectivity Dashboard
+A dedicated panel showing graph connectivity status - the PRIMARY success metric.
+- Connected Components: Display count (must be 1)
+- Largest Component %: Show percentage of nodes in main component
+- Bridge Edges: Highlight edges that connect components
+- Isolated Nodes: List any nodes with degree 0 (should be 0)
+- Graph Density: Show edge count / possible edges
+
+Connectivity Metrics Display
++-------------------------------------------------------------+
+|                  GRAPH CONNECTIVITY STATUS                   |
++-------------------------------------------------------------+
+|                                                              |
+|   Connected Components:  1  [checkmark]                      |
+|   Total Nodes:           4,247                               |
+|   Total Edges:           10,892                              |
+|   Average Degree:        5.13                                |
+|   Graph Density:         0.12%                               |
+|   Isolated Nodes:        0  [checkmark]                      |
+|   Bridge Edges:          12                                  |
+|                                                              |
+|   ══════════════════════════════════════════════════════     |
+|   STATUS: FULLY CONNECTED [checkmark]                        |
+|   ══════════════════════════════════════════════════════     |
+|                                                              |
++-------------------------------------------------------------+
+
+
+8. Technical Specifications
+8.1 Technology Stack
+Layer	Technology	Version / Notes
+Language	Python	3.11+
+ML Framework	PyTorch	2.0+ with CUDA 12
+Embeddings	FinBERT	ProsusAI/finbert (HuggingFace)
+NLP	spaCy	3.x with en_core_web_lg
+Graph DB	Neo4j	5.x Community Edition
+API Server	FastAPI	0.100+
+Frontend	React + TypeScript	18.x
+Visualization	Sigma.js	2.x with WebGL
+State Management	Zustand	4.x (lightweight)
+Task Queue	Celery + Redis	For async processing
+
+8.2 Hardware Requirements
+Component	Minimum	Recommended
+GPU	RTX 3080 (10GB)	RTX 4090 (24GB)
+RAM	32GB	64GB
+Storage	100GB SSD	500GB NVMe SSD
+CPU	8-core	16-core (Ryzen 9 / i9)
+
+8.3 Performance Requirements
+Operation	Target	Maximum
+Single filing processing	< 5 min	10 min
+Full corpus (12 filings)	< 1 hour	2 hours
+Expert inference per filing	< 30 sec	60 sec
+Graph visualization load	< 3 sec	5 sec
+Path query response	< 100 ms	500 ms
+Connectivity check	< 1 sec	5 sec
+
+
+9. Acceptance Criteria
+9.1 Must-Have (P0) - Project Fails Without These
+Critical Success Criteria
+ALL of these must be met for project acceptance:
+- Graph has exactly 1 connected component (100% connectivity)
+- Cross-Reference Expert F1 >= 82%
+- Causal Chain Expert F1 >= 72%
+- All 12 Apple filings (3x 10-K + 9x 10-Q) successfully processed
+- WebGL visualization renders without errors
+- Connectivity dashboard shows green status
+
+9.2 Should-Have (P1)
+Criteria	Target	Status
+Temporal Linker F1 >= 87%	87%	Required
+Table-Text Connector F1 >= 80%	80%	Required
+Visualization 60fps @ 10k nodes	60fps	Required
+Path highlighting feature	Working	Required
+Expert filter toggles	Working	Required
+
+9.3 Nice-to-Have (P2)
+Criteria	Target	Status
+Semantic Bridge precision >= 70%	70%	Optional
+Multiple layout algorithms	3 options	Optional
+Export to PNG/SVG	Working	Optional
+Confidence calibration analysis	Report	Optional
+Ablation study completed	Report	Optional
+
+9.4 Verification Checklist
+Final Verification Steps
+[ ] Step 1: Run connectivity check
+    python -m moe_graph.verify --check connectivity
+    Expected: 'Connected components: 1'
+
+[ ] Step 2: Run expert evaluation
+    python -m moe_graph.evaluate --expert all --gold-set test
+    Expected: All experts meet F1 thresholds
+
+[ ] Step 3: Verify filing count
+    python -m moe_graph.verify --check filings
+    Expected: '12 filings processed (3 10-K, 9 10-Q)'
+
+[ ] Step 4: Launch visualization
+    npm run start
+    Expected: Graph renders in < 5 seconds
+
+[ ] Step 5: Manual connectivity test
+    - Click any node
+    - Use path finder to reach a distant node
+    Expected: Path exists between any two nodes
+
+[ ] Step 6: Run ablation study (optional)
+    python -m moe_graph.ablation --all
+    Expected: Report generated in results/ablation/
+
+
+10. Project Timeline
+10.1 Phase Breakdown
+Phase	Description	Deliverables	Duration
+1	Data Ingestion	SEC fetcher, parser, XBRL extractor	5 days
+2	Expert Development	5 expert modules with tests	10 days
+3	Gold Standard Creation	1000 annotated edge pairs	5 days
+4	Expert Training	Trained models, eval reports	5 days
+5	Graph Construction	Full graph in Neo4j	3 days
+6	Visualization	Sigma.js WebGL interface	5 days
+7	Testing & Polish	Bug fixes, performance tuning	3 days
+Total estimated duration: 36 days (~7 weeks)
+
+10.2 Milestones
+#	Milestone	Criteria	Week
+M1	Data Pipeline Complete	12 filings ingested	Week 1
+M2	Experts Implemented	All 5 experts coded	Week 3
+M3	Gold Standard Ready	1000 annotations done	Week 4
+M4	Accuracy Targets Met	All F1 thresholds passed	Week 5
+M5	Graph Connected	1 component verified	Week 6
+M6	Visualization Complete	WebGL rendering works	Week 7
+
+
+11. Risks and Mitigations
+Risk	Probability	Impact	Mitigation
+Expert accuracy below threshold	Medium	High	Iterative training, expand gold set, tune thresholds
+Graph has disconnected components	Low	Critical	ConnectivityEnforcer with forced bridges
+SEC API rate limiting	Medium	Low	Exponential backoff, aggressive caching
+WebGL performance issues	Low	Medium	Level-of-detail rendering, node clustering
+XBRL parsing failures	Medium	Medium	3-tier fallback: arelle -> python-xbrl -> HTML
+Gold standard annotation disagreement	Medium	Medium	Third annotator, detailed guidelines in Appendix C
+FinBERT OOM on large texts	Low	Medium	Chunk text to 512 tokens, pool embeddings
+
+
+12. Appendix
+A. SEC Filing Structure Reference
+10-K Structure
+Part I
+  Item 1.  Business
+  Item 1A. Risk Factors
+  Item 1B. Unresolved Staff Comments
+  Item 2.  Properties
+  Item 3.  Legal Proceedings
+  Item 4.  Mine Safety Disclosures
+
+Part II
+  Item 5.  Market for Registrant's Common Equity
+  Item 6.  [Reserved]
+  Item 7.  Management's Discussion and Analysis (MD&A)
+  Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+  Item 8.  Financial Statements and Supplementary Data
+  Item 9.  Changes in and Disagreements with Accountants
+  Item 9A. Controls and Procedures
+  Item 9B. Other Information
+
+Part III
+  Item 10. Directors, Executive Officers and Corporate Governance
+  Item 11. Executive Compensation
+  Item 12. Security Ownership
+  Item 13. Certain Relationships and Related Transactions
+  Item 14. Principal Accounting Fees and Services
+
+Part IV
+  Item 15. Exhibits, Financial Statement Schedules
+
+B. Edge Type Definitions
+Edge Type	Definition	Expert Source
+EXPLAINS	Target node explains/elaborates on source node	CrossRef, TableText
+REFERS_TO	Source contains explicit reference to target	CrossRef
+CAUSED_BY	Source was caused/driven by target	Causal
+LEADS_TO	Source leads to/results in target	Causal
+TEMPORAL_NEXT	Source is same entity in next time period	Temporal
+EXPLAINS_LINE_ITEM	Text explains specific financial line item	TableText
+DISCUSSES	Text discusses table content generally	TableText
+SEMANTICALLY_SIMILAR	Nodes have high embedding similarity (>0.85)	Semantic
+BRIDGE	Structural edge connecting components	Connectivity
+
+C. Annotation Guidelines
+C.1 General Principles
+- Annotate based on the text content, not external knowledge
+- When uncertain, mark as negative (conservative approach)
+- Each edge should have clear textual evidence
+- Consider directionality: source -> target
+
+C.2 Cross-Reference Annotations
+Positive Examples:
+- "As discussed in Note 3..." -> Note 3 node (REFERS_TO)
+- "See Item 7 for details" -> Item 7 section (REFERS_TO)
+- "The following table summarizes..." -> Adjacent table (EXPLAINS)
+
+Negative Examples:
+- Generic phrases without specific targets: "as noted above"
+- References to external documents not in corpus
+- Ambiguous references that could match multiple targets
+
+C.3 Causal Annotations
+Positive Examples:
+- "Revenue increased due to higher iPhone sales" (CAUSED_BY)
+- "Cost reductions led to improved margins" (LEADS_TO)
+- "The decline was driven by supply constraints" (CAUSED_BY)
+
+Negative Examples:
+- Temporal co-occurrence without causation: "Revenue grew and costs fell"
+- Hypothetical causation: "If sales increase, profits would rise"
+- Correlation without clear causal language
+
+C.4 Temporal Annotations
+Positive Examples:
+- Same XBRL tag across FY2023 -> FY2024 (TEMPORAL_NEXT)
+- Same risk factor topic in Q1 -> Q2 (TEMPORAL_NEXT)
+- Same entity mentioned in consecutive filings
+
+Negative Examples:
+- Similar but distinct concepts across time
+- Different granularity (annual vs quarterly) without clear match
+
+C.5 Table-Text Annotations
+Positive Examples:
+- MD&A paragraph explaining revenue table row (EXPLAINS_LINE_ITEM)
+- Note text discussing balance sheet item (EXPLAINS_LINE_ITEM)
+- General discussion of table content (DISCUSSES)
+
+Negative Examples:
+- Text mentions similar topic but different numbers
+- Generic financial discussion without specific table reference
+
+C.6 Semantic Similarity Annotations
+Score	Definition
+5	Near-identical content (paraphrase)
+4	Same topic, same specific details
+3	Same topic, different details
+2	Related topic
+1	Unrelated
+
+Threshold for SEMANTICALLY_SIMILAR edge: Score >= 4
+
+D. Directory Structure
+Project Directory Layout
+moe-graph-builder/
+├── README.md
+├── pyproject.toml
+├── requirements.txt
+│
+├── data/
+│   ├── raw/                    # Original SEC filings
+│   ├── parsed/                 # Extracted nodes
+│   ├── embeddings/             # FinBERT vectors
+│   ├── gold/                   # Gold standard annotations
+│   └── graph/                  # Neo4j exports
+│
+├── src/
+│   ├── __init__.py
+│   ├── ingestion/              # Data ingestion pipeline
+│   │   ├── sec_fetcher.py
+│   │   ├── html_parser.py
+│   │   ├── xbrl_processor.py
+│   │   └── embedding_engine.py
+│   │
+│   ├── experts/                # MoE expert modules
+│   │   ├── base.py
+│   │   ├── cross_reference.py
+│   │   ├── causal.py
+│   │   ├── temporal.py
+│   │   ├── table_text.py
+│   │   └── semantic.py
+│   │
+│   ├── graph/                  # Graph construction
+│   │   ├── builder.py
+│   │   ├── connectivity.py
+│   │   ├── neo4j_client.py
+│   │   └── exporter.py
+│   │
+│   ├── evaluation/             # Evaluation framework
+│   │   ├── metrics.py
+│   │   ├── gold_standard.py
+│   │   └── ablation.py
+│   │
+│   └── api/                    # FastAPI server
+│       ├── main.py
+│       ├── routes/
+│       └── schemas/
+│
+├── frontend/                   # React visualization
+│   ├── package.json
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── GraphView.tsx
+│   │   │   ├── ConnectivityPanel.tsx
+│   │   │   ├── NodeDetails.tsx
+│   │   │   └── FilterPanel.tsx
+│   │   └── App.tsx
+│   └── public/
+│
+├── tests/
+│   ├── test_ingestion/
+│   ├── test_experts/
+│   ├── test_graph/
+│   └── test_api/
+│
+├── scripts/
+│   ├── fetch_filings.py
+│   ├── build_graph.py
+│   ├── evaluate.py
+│   └── run_ablation.py
+│
+└── configs/
+    ├── default.yaml
+    ├── experts.yaml
+    └── neo4j.yaml
+
+
+Document Summary
+This TRD defines the complete technical requirements for building a fully-connected knowledge graph from Apple's SEC filings using a Mixture-of-Experts architecture.
+
+Primary Success Criteria: 100% Graph Connectivity + Expert Accuracy Thresholds
+
+Key Additions in v1.1:
+- Related Work section with literature references
+- Detailed Edge schema definition
+- Expert algorithm specifications with code
+- Connectivity Enforcer algorithm
+- API endpoint specifications
+- Annotation guidelines (Appendix C)
+- Ablation study plan
+- Directory structure (Appendix D)
+- Error handling and caching strategy

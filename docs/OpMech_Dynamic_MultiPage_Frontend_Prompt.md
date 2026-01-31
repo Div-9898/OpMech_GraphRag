@@ -1,0 +1,1526 @@
+# OpMech Frontend - Full Dynamic Multi-Page Demo Implementation
+
+## Objective
+
+Transform the current static demo into a **fully dynamic, multi-page application** with **real-time visualizations** that showcases OpMech's capabilities to **non-technical audiences** through intuitive animations, charts, and visual storytelling.
+
+**Goal**: When someone asks a question, they should SEE the system thinking - watching operators explore the graph, measuring divergence, and arriving at an answer. Each feature should have its own dedicated page with deep-dive explanations and interactive elements.
+
+---
+
+## Site Structure (Multi-Page)
+
+```
+/                           → Landing Page (Hero + Overview)
+/features                   → Features Overview
+/features/dual-operators    → Deep dive: Dual Operator Architecture
+/features/commutator        → Deep dive: The Commutator
+/features/mode-selection    → Deep dive: Intelligent Mode Selection
+/features/trust-decision    → Deep dive: Trust & Evidence Scoring
+/features/graph-construction → Deep dive: MoE Graph Building
+/demo                       → Live Interactive Demo
+/architecture               → System Architecture
+/metrics                    → Performance Metrics Dashboard
+/team                       → Team & Credits
+/paper                      → Research Paper / Documentation
+```
+
+---
+
+## Current State vs Target State
+
+| Component | Current (Static) | Target (Dynamic) |
+|-----------|------------------|------------------|
+| Chat Response | Template text | **Real answer from backend** |
+| Mode Badge | Always "ADAPTIVE 75%" | **Updates per query** |
+| Divergence Gauge | Always "0.335" | **Animates during query** |
+| Hops Counter | Always "4" | **Counts up during traversal** |
+| 3D Graph | Static nodes | **Animated traversal paths** |
+| Divergence Chart | Static line | **Real-time trajectory** |
+| Evidence Panel | Static counts | **Updates from response** |
+| Feature Pages | Single scroll | **Dedicated interactive pages** |
+
+---
+
+## Page-by-Page Specification
+
+### Page 1: Landing Page (`/`)
+
+**Purpose**: First impression - hook the visitor with stunning visuals and clear value proposition.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  NAV: [Logo] OpMech-GraphRAG    [Features▼] [Demo] [Architecture]       │
+│                                 [Metrics] [Team] [Try Demo Button]      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │              ╭─────────────────────────────────╮                │  │
+│   │              │                                 │                │  │
+│   │              │    3D HERO GRAPH ANIMATION      │                │  │
+│   │              │                                 │                │  │
+│   │              │  • Slowly rotating graph        │                │  │
+│   │              │  • Two glowing paths (A & B)    │                │  │
+│   │              │  • Particles flowing            │                │  │
+│   │              │  • Nodes pulsing by type        │                │  │
+│   │              │                                 │                │  │
+│   │              ╰─────────────────────────────────╯                │  │
+│   │                                                                 │  │
+│   │         OpMech-GraphRAG                                         │  │
+│   │         ═══════════════                                         │  │
+│   │         Multi-Perspective Knowledge Retrieval                   │  │
+│   │         Through Quantum-Inspired Operator Mechanics             │  │
+│   │                                                                 │  │
+│   │         "When two perspectives converge, truth emerges"         │  │
+│   │                                                                 │  │
+│   │              [ Try Live Demo ]  [ Watch Video ]                 │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐                   │
+│   │  1,737  │  │ 26,842  │  │  100%   │  │   93%   │                   │
+│   │  Nodes  │  │  Edges  │  │Accuracy │  │Reduction│                   │
+│   └─────────┘  └─────────┘  └─────────┘  └─────────┘                   │
+│                                                                         │
+│   ─────────────────────────────────────────────────────────────────────│
+│                                                                         │
+│   KEY FEATURES (Cards linking to subpages)                             │
+│   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+│   │ 🔀 Dual      │ │ 📊 The      │ │ 🎯 Mode     │ │ ✓ Trust     │  │
+│   │ Operators    │ │ Commutator  │ │ Selection   │ │ Decision    │  │
+│   │              │ │             │ │             │ │             │  │
+│   │ Two paths,   │ │ Measuring   │ │ EXPLOIT,    │ │ Know which  │  │
+│   │ one truth    │ │ divergence  │ │ ADAPTIVE,   │ │ source to   │  │
+│   │              │ │             │ │ EXPLORE     │ │ trust       │  │
+│   │ [Learn →]    │ │ [Learn →]   │ │ [Learn →]   │ │ [Learn →]   │  │
+│   └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  │
+│                                                                         │
+│   ─────────────────────────────────────────────────────────────────────│
+│                                                                         │
+│   USE CASES                                                            │
+│   "What problems does OpMech solve?"                                   │
+│                                                                         │
+│   • Financial Analysis    • Due Diligence    • Regulatory Compliance   │
+│   • Risk Assessment       • Research Q&A     • Document Intelligence   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Animations**:
+- Hero graph: Continuous slow rotation with particle effects
+- Stats: Count-up animation on scroll
+- Feature cards: Stagger fade-in on scroll
+- Smooth scroll indicator
+
+---
+
+### Page 2: Features Overview (`/features`)
+
+**Purpose**: Overview of all features with navigation to deep-dive pages.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         How OpMech Works                                │
+│            A novel approach to knowledge retrieval                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                    ANIMATED PIPELINE DIAGRAM                    │  │
+│   │                                                                 │  │
+│   │    [Query] ──▶ [Classifier] ──▶ [Operators] ──▶ [Commutator]   │  │
+│   │                                      │               │          │  │
+│   │                               [Bridge Seeds]         │          │  │
+│   │                                      │               ▼          │  │
+│   │                               [Loop Back] ◀── [Mode Selector]   │  │
+│   │                                                      │          │  │
+│   │                                          ┌───────────┼──────┐   │  │
+│   │                                          ▼           ▼      ▼   │  │
+│   │                                      [EXPLOIT] [ADAPTIVE] [EXPLORE]│
+│   │                                                                 │  │
+│   │   (Click any component to learn more)                          │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   FEATURE DEEP DIVES                                                   │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  1. DUAL OPERATOR ARCHITECTURE                    [Explore →]   │  │
+│   │     ─────────────────────────────────────                       │  │
+│   │     Two complementary operators explore the knowledge graph:    │  │
+│   │     • Operator A: Structure-First (XBRL, hierarchical)          │  │
+│   │     • Operator B: Narrative-First (MD&A, semantic)              │  │
+│   │                                                                 │  │
+│   │     [Mini animation: Two paths diverging then converging]       │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  2. THE COMMUTATOR                                [Explore →]   │  │
+│   │     ─────────────────                                           │  │
+│   │     Measures divergence between operator perspectives:          │  │
+│   │     [A, B] = AB - BA ≠ 0                                        │  │
+│   │                                                                 │  │
+│   │     [Animated gauge showing divergence components]              │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  3. INTELLIGENT MODE SELECTION                    [Explore →]   │  │
+│   │     ─────────────────────────────                               │  │
+│   │     System adapts response strategy based on divergence:        │  │
+│   │                                                                 │  │
+│   │     [EXPLOIT]     [ADAPTIVE]      [EXPLORE]                     │  │
+│   │      High Conf     Balanced        Multiple                     │  │
+│   │       89%           75%           Perspectives                  │  │
+│   │                                     45%                         │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  4. TRUST & EVIDENCE SCORING                      [Explore →]   │  │
+│   │     ─────────────────────────────                               │  │
+│   │     Intelligent source selection based on query type:           │  │
+│   │     • Numerical queries → Trust XBRL data                       │  │
+│   │     • Opinion queries → Merge perspectives                      │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  5. MOE GRAPH CONSTRUCTION                        [Explore →]   │  │
+│   │     ──────────────────────────                                  │  │
+│   │     7 specialized experts build the knowledge graph:            │  │
+│   │     Entity • Financial • Relationship • Temporal •              │  │
+│   │     Hierarchical • Causal • Risk                                │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Page 3: Dual Operators Deep Dive (`/features/dual-operators`)
+
+**Purpose**: Explain the dual operator architecture with interactive visualization.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Features                                                     │
+│                                                                         │
+│                    Dual Operator Architecture                           │
+│                    Two perspectives, one truth                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   THE CONCEPT                                                          │
+│   ───────────                                                          │
+│   Just as quantum mechanics uses non-commuting operators to reveal     │
+│   hidden properties, OpMech uses two complementary operators to        │
+│   explore knowledge from different angles.                             │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                   INTERACTIVE VISUALIZATION                     │  │
+│   │                                                                 │  │
+│   │         ┌─────────────────────────────────────────┐            │  │
+│   │         │                                         │            │  │
+│   │         │           KNOWLEDGE GRAPH               │            │  │
+│   │         │                                         │            │  │
+│   │         │    🔵───🔵───🔵    🟢───🟢───🟢         │            │  │
+│   │         │      \   │   /        \   │   /         │            │  │
+│   │         │       🔵─┼─🔵          🟢─┼─🟢          │            │  │
+│   │         │          │                │             │            │  │
+│   │         │      [QUERY]          [QUERY]           │            │  │
+│   │         │                                         │            │  │
+│   │         │    Operator A         Operator B        │            │  │
+│   │         │    (Structure)        (Narrative)       │            │  │
+│   │         │                                         │            │  │
+│   │         └─────────────────────────────────────────┘            │  │
+│   │                                                                 │  │
+│   │   [▶ Play Animation]  [Operator A] [Operator B] [Both]         │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌───────────────────────────┐  ┌───────────────────────────┐        │
+│   │      OPERATOR A           │  │      OPERATOR B           │        │
+│   │      Structure-First      │  │      Narrative-First      │        │
+│   │      ════════════════     │  │      ════════════════     │        │
+│   │                           │  │                           │        │
+│   │  Starting Points:         │  │  Starting Points:         │        │
+│   │  • XBRL financial tags    │  │  • Semantic similarity    │        │
+│   │  • Direct entity matches  │  │  • Keyword expansion      │        │
+│   │                           │  │                           │        │
+│   │  Traversal Strategy:      │  │  Traversal Strategy:      │        │
+│   │  • Follow hierarchical    │  │  • Follow semantic        │        │
+│   │    relationships          │  │    connections            │        │
+│   │  • Prefer structured      │  │  • Prefer contextual      │        │
+│   │    data paths             │  │    narrative paths        │        │
+│   │                           │  │                           │        │
+│   │  Best For:                │  │  Best For:                │        │
+│   │  • Exact figures          │  │  • Context & explanation  │        │
+│   │  • Financial metrics      │  │  • Qualitative insights   │        │
+│   │  • Regulatory data        │  │  • Trend analysis         │        │
+│   │                           │  │                           │        │
+│   │  Evidence Types:          │  │  Evidence Types:          │        │
+│   │  🔷 FINANCIAL_LINE (62%)  │  │  🟢 TEXT_SECTION (45%)    │        │
+│   │  🔷 NOTE (23%)            │  │  🟢 NOTE (35%)            │        │
+│   │  🔷 TEXT_SECTION (15%)    │  │  🟢 FINANCIAL_LINE (20%)  │        │
+│   └───────────────────────────┘  └───────────────────────────┘        │
+│                                                                         │
+│   WHY TWO OPERATORS?                                                   │
+│   ──────────────────                                                   │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  EXAMPLE: "What was Apple's revenue in FY2023?"                 │  │
+│   │                                                                 │  │
+│   │  Operator A finds:                  Operator B finds:           │  │
+│   │  ├── XBRL: $383,285,000,000        ├── MD&A: "Revenue of        │  │
+│   │  ├── Label: "Net Sales"            │   approximately $383B"     │  │
+│   │  └── Period: FY2023                └── Context: "slight         │  │
+│   │                                        decrease from FY2022"    │  │
+│   │                                                                 │  │
+│   │  COMBINED: Precise figure ($383.29B) WITH context (YoY change)  │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌──────────────────┐                                                 │
+│   │ [← Prev: Overview] [Next: The Commutator →]                      │ │
+│   └──────────────────┘                                                 │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interactive Elements**:
+- Toggle between Operator A view, Operator B view, and combined view
+- Animated paths showing traversal
+- Hover on nodes to see content
+- Play/pause traversal animation
+
+---
+
+### Page 4: The Commutator Deep Dive (`/features/commutator`)
+
+**Purpose**: Explain the mathematical heart of OpMech visually.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Features                                                     │
+│                                                                         │
+│                         The Commutator                                  │
+│                    Measuring perspective divergence                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   THE MATH (Made Simple)                                               │
+│   ──────────────────────                                               │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │              [A, B] = AB - BA ≠ 0                               │  │
+│   │                                                                 │  │
+│   │   In quantum mechanics, when operators don't commute,           │  │
+│   │   it reveals fundamental uncertainty.                           │  │
+│   │                                                                 │  │
+│   │   In OpMech, when operators diverge, it reveals                 │  │
+│   │   how much perspectives differ on a question.                   │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   DIVERGENCE COMPONENTS                                                │
+│   ─────────────────────                                                │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │      ╭────────────────────╮                                     │  │
+│   │      │                    │    Δ_E: Evidence Overlap            │  │
+│   │      │       0.335        │    ════════════════════             │  │
+│   │      │                    │    How much do the operators        │  │
+│   │      │    Combined Δ      │    find the same evidence?          │  │
+│   │      │                    │                                     │  │
+│   │      ╰────────────────────╯    ████████████░░░░░░ 0.63          │  │
+│   │                                                                 │  │
+│   │   [Interactive: Drag slider to see how Δ affects mode]         │  │
+│   │                                                                 │  │
+│   │   ──────────────────────────────────────────────────            │  │
+│   │                                                                 │  │
+│   │   Δ_V: Structural Overlap     Δ_A: Answer Agreement             │  │
+│   │   ═══════════════════════     ═════════════════════             │  │
+│   │   Do they traverse similar    Do they reach the same            │  │
+│   │   graph regions?              conclusion?                       │  │
+│   │                                                                 │  │
+│   │   █████████░░░░░░░░░ 0.57     ██░░░░░░░░░░░░░░░░░ 0.03          │  │
+│   │                                                                 │  │
+│   │   ──────────────────────────────────────────────────            │  │
+│   │                                                                 │  │
+│   │   Δ_C: Confidence Agreement                                     │  │
+│   │   ═════════════════════════                                     │  │
+│   │   How confident is each operator in its answer?                 │  │
+│   │                                                                 │  │
+│   │   ███░░░░░░░░░░░░░░░░ 0.11                                      │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   WHAT DIVERGENCE TELLS US                                             │
+│   ────────────────────────                                             │
+│                                                                         │
+│   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                      │
+│   │   LOW Δ     │ │  MEDIUM Δ   │ │   HIGH Δ    │                      │
+│   │   < 0.25    │ │  0.25-0.60  │ │   > 0.60    │                      │
+│   │             │ │             │ │             │                      │
+│   │  Operators  │ │  Operators  │ │  Operators  │                      │
+│   │  AGREE      │ │  PARTIALLY  │ │  DISAGREE   │                      │
+│   │             │ │  AGREE      │ │             │                      │
+│   │     ↓       │ │     ↓       │ │     ↓       │                      │
+│   │  EXPLOIT    │ │  ADAPTIVE   │ │  EXPLORE    │                      │
+│   │  High conf  │ │  Balanced   │ │  Multiple   │                      │
+│   │  Direct ans │ │  Nuanced    │ │  viewpoints │                      │
+│   └─────────────┘ └─────────────┘ └─────────────┘                      │
+│                                                                         │
+│   LIVE EXAMPLE                                                         │
+│   ────────────                                                         │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │  Try different queries and watch the divergence change:         │  │
+│   │                                                                 │  │
+│   │  [What was Apple's revenue in FY2023?        ] [Run →]          │  │
+│   │                                                                 │  │
+│   │  Suggested:                                                     │  │
+│   │  • "What was Apple's revenue?" (Low Δ → EXPLOIT)                │  │
+│   │  • "Why did iPhone sales change?" (Medium Δ → ADAPTIVE)         │  │
+│   │  • "Is Apple overvalued?" (High Δ → EXPLORE)                    │  │
+│   │                                                                 │  │
+│   │  [Animated divergence gauge updates in real-time]               │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interactive Elements**:
+- Animated divergence gauge
+- Slider to simulate different Δ values and see mode changes
+- Live query tester with real-time divergence display
+- Hover explanations for each component
+
+---
+
+### Page 5: Mode Selection Deep Dive (`/features/mode-selection`)
+
+**Purpose**: Explain the three modes with examples.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Features                                                     │
+│                                                                         │
+│                    Intelligent Mode Selection                           │
+│                    The right answer, the right way                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   Based on divergence analysis, OpMech automatically selects the        │
+│   optimal response strategy for each query.                            │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   ┌───────────────────────────────────────────────────────┐    │  │
+│   │   │              MODE SELECTION VISUALIZER                │    │  │
+│   │   │                                                       │    │  │
+│   │   │    Δ: [════════════●══════════════════════════]      │    │  │
+│   │   │        0         0.25        0.60              1      │    │  │
+│   │   │                   │           │                       │    │  │
+│   │   │              ┌────┴────┐ ┌────┴────┐                  │    │  │
+│   │   │              │ τ_low   │ │ τ_high  │                  │    │  │
+│   │   │              └─────────┘ └─────────┘                  │    │  │
+│   │   │                                                       │    │  │
+│   │   │   [EXPLOIT]      [ADAPTIVE]         [EXPLORE]         │    │  │
+│   │   │    Zone           Zone               Zone             │    │  │
+│   │   │                                                       │    │  │
+│   │   └───────────────────────────────────────────────────────┘    │  │
+│   │                                                                 │  │
+│   │   [Drag the slider to see how divergence affects mode]         │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   THE THREE MODES                                                      │
+│   ───────────────                                                      │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   ⚡ EXPLOIT MODE                                    [89%]      │  │
+│   │   ═══════════════                                               │  │
+│   │                                                                 │  │
+│   │   When: Low divergence (Δ < 0.25) OR strong answer agreement    │  │
+│   │   What: Direct, confident answer from authoritative source      │  │
+│   │   Why: Operators agree - we KNOW the answer                     │  │
+│   │                                                                 │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │ EXAMPLE                                                 │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Q: "What was Apple's total revenue in FY2023?"          │  │  │
+│   │   │                                                         │  │  │
+│   │   │ A: "Apple's total revenue for fiscal year 2023 was      │  │  │
+│   │   │     $383.29 billion, as reported in the audited         │  │  │
+│   │   │     financial statements."                              │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Confidence: 89%  |  Hops: 2  |  Trust: Operator A       │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   ⚖️ ADAPTIVE MODE                                   [75%]      │  │
+│   │   ════════════════                                              │  │
+│   │                                                                 │  │
+│   │   When: Medium divergence (0.25 < Δ < 0.60)                     │  │
+│   │   What: Balanced analysis with nuanced context                  │  │
+│   │   Why: Operators partially agree - provide depth                │  │
+│   │                                                                 │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │ EXAMPLE                                                 │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Q: "What factors drove iPhone revenue changes?"         │  │  │
+│   │   │                                                         │  │  │
+│   │   │ A: "iPhone revenue decreased from $394.33B to $383.29B  │  │  │
+│   │   │     in FY2023. Key factors include:                     │  │  │
+│   │   │     • Market saturation in developed economies          │  │  │
+│   │   │     • Foreign exchange headwinds                        │  │  │
+│   │   │     • Extended upgrade cycles..."                       │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Confidence: 75%  |  Hops: 4  |  Trust: Weighted Merge   │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   🔍 EXPLORE MODE                                    [45%]      │  │
+│   │   ═══════════════                                               │  │
+│   │                                                                 │  │
+│   │   When: High divergence (Δ > 0.60) OR opinion query             │  │
+│   │   What: Multiple perspectives presented                         │  │
+│   │   Why: Operators disagree - explore different viewpoints        │  │
+│   │                                                                 │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │ EXAMPLE                                                 │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Q: "Is Apple's margin pressure cyclical or structural?" │  │  │
+│   │   │                                                         │  │  │
+│   │   │ A: "### Multiple Perspectives                           │  │  │
+│   │   │                                                         │  │  │
+│   │   │     **Perspective A (Quantitative):**                   │  │  │
+│   │   │     Operating margins show seasonal patterns...         │  │  │
+│   │   │                                                         │  │  │
+│   │   │     **Perspective B (Qualitative):**                    │  │  │
+│   │   │     Competitive pressures suggest structural shift..."  │  │  │
+│   │   │                                                         │  │  │
+│   │   │ Confidence: 45%  |  Hops: 4  |  Trust: Merge Equal      │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   TRY IT YOURSELF                                                      │
+│   ────────────────                                                     │
+│   [Interactive demo: Enter a query and see which mode is selected]     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Page 6: Trust Decision Deep Dive (`/features/trust-decision`)
+
+**Purpose**: Explain how the system decides which operator to trust.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Features                                                     │
+│                                                                         │
+│                      Trust & Evidence Scoring                           │
+│                   Knowing which source to believe                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   THE CHALLENGE                                                        │
+│   ─────────────                                                        │
+│                                                                         │
+│   When operators find different evidence, which do we trust?           │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   Operator A says: "$383.29 billion"  (from XBRL)               │  │
+│   │   Operator B says: "$394.33 billion"  (from narrative text)     │  │
+│   │                                                                 │  │
+│   │   Which is correct? 🤔                                          │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   EVIDENCE AUTHORITY HIERARCHY                                         │
+│   ────────────────────────────                                         │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   [Visual: Pyramid of evidence types]                          │  │
+│   │                                                                 │  │
+│   │                    ┌─────────┐                                  │  │
+│   │                    │  XBRL   │  ← Highest authority             │  │
+│   │                    │ (100%)  │    Audited, machine-readable     │  │
+│   │                 ┌──┴─────────┴──┐                               │  │
+│   │                 │   FINANCIAL   │  ← High authority             │  │
+│   │                 │   TABLES (90%)│    Structured data            │  │
+│   │              ┌──┴───────────────┴──┐                            │  │
+│   │              │    TEXT SECTIONS    │  ← Medium authority        │  │
+│   │              │       (40%)         │    May lack context        │  │
+│   │           ┌──┴─────────────────────┴──┐                         │  │
+│   │           │         NOTES             │  ← Lower authority      │  │
+│   │           │         (30%)             │    Explanatory          │  │
+│   │        ┌──┴───────────────────────────┴──┐                      │  │
+│   │        │           ENTITIES              │  ← Lowest authority  │  │
+│   │        │            (20%)                │    Need context      │  │
+│   │        └─────────────────────────────────┘                      │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   TRUST DECISION LOGIC                                                 │
+│   ────────────────────                                                 │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │   For NUMERICAL queries:                                        │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │                                                         │  │  │
+│   │   │  if Operator A has > 55% of FINANCIAL_LINE evidence:    │  │  │
+│   │   │      → TRUST_A (Use Operator A's answer)                │  │  │
+│   │   │                                                         │  │  │
+│   │   │  Example:                                               │  │  │
+│   │   │  • Operator A: 8 FINANCIAL_LINE nodes                   │  │  │
+│   │   │  • Operator B: 5 FINANCIAL_LINE nodes                   │  │  │
+│   │   │  • Ratio: 8/13 = 62% → TRUST_A ✓                        │  │  │
+│   │   │                                                         │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   │   For OPINION queries:                                          │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │                                                         │  │  │
+│   │   │  → MERGE_EQUAL (Combine both perspectives)              │  │  │
+│   │   │                                                         │  │  │
+│   │   │  No single "right" answer exists, so present both views │  │  │
+│   │   │                                                         │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   │   For CAUSAL queries:                                           │  │
+│   │   ┌─────────────────────────────────────────────────────────┐  │  │
+│   │   │                                                         │  │  │
+│   │   │  → MERGE_WEIGHTED (Weight by reliability score)         │  │  │
+│   │   │                                                         │  │  │
+│   │   │  Balance quantitative data with qualitative context     │  │  │
+│   │   │                                                         │  │  │
+│   │   └─────────────────────────────────────────────────────────┘  │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   LIVE DEMONSTRATION                                                   │
+│   ──────────────────                                                   │
+│                                                                         │
+│   [Interactive: Show evidence breakdown and trust decision for query]  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Page 7: MoE Graph Construction (`/features/graph-construction`)
+
+**Purpose**: Explain how the knowledge graph is built with 7 experts.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Features                                                     │
+│                                                                         │
+│                    MoE Graph Construction                               │
+│              7 specialized experts, one unified graph                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   THE CHALLENGE                                                        │
+│   ─────────────                                                        │
+│                                                                         │
+│   SEC filings contain multiple types of information:                   │
+│   Financial tables, narrative text, risk factors, entity mentions...   │
+│                                                                         │
+│   A single extraction approach misses important connections.           │
+│                                                                         │
+│   OUR SOLUTION: Mixture of Experts (MoE)                               │
+│   ──────────────────────────────────────                               │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │              ┌─────────────────────────────────┐                │  │
+│   │              │        SEC FILING (10-K)        │                │  │
+│   │              └───────────────┬─────────────────┘                │  │
+│   │                              │                                  │  │
+│   │        ┌─────────────────────┼─────────────────────┐            │  │
+│   │        │         │          │          │          │            │  │
+│   │        ▼         ▼          ▼          ▼          ▼            │  │
+│   │   ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐           │  │
+│   │   │ Entity ││Financial││Relation││Temporal││Hierarch│           │  │
+│   │   │ Expert ││ Expert ││ Expert ││ Expert ││ Expert │           │  │
+│   │   └───┬────┘└───┬────┘└───┬────┘└───┬────┘└───┬────┘           │  │
+│   │       │         │         │         │         │                │  │
+│   │       │    ┌────────┐┌────────┐     │         │                │  │
+│   │       │    │ Causal ││  Risk  │     │         │                │  │
+│   │       │    │ Expert ││ Expert │     │         │                │  │
+│   │       │    └───┬────┘└───┬────┘     │         │                │  │
+│   │       │        │         │          │         │                │  │
+│   │       └────────┴────┬────┴──────────┴─────────┘                │  │
+│   │                     │                                          │  │
+│   │                     ▼                                          │  │
+│   │              ┌─────────────────────────────────┐                │  │
+│   │              │      UNIFIED KNOWLEDGE GRAPH    │                │  │
+│   │              │    1,737 nodes • 26,842 edges   │                │  │
+│   │              └─────────────────────────────────┘                │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   THE 7 EXPERTS                                                        │
+│   ─────────────                                                        │
+│                                                                         │
+│   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐     │
+│   │   ENTITY    │ │  FINANCIAL  │ │ RELATIONSHIP│ │  TEMPORAL   │     │
+│   │   ════════  │ │  ═══════════│ │ ════════════│ │  ═════════  │     │
+│   │             │ │             │ │             │ │             │     │
+│   │ • Companies │ │ • XBRL tags │ │ • Semantic  │ │ • Fiscal    │     │
+│   │ • Products  │ │ • Revenue   │ │   links     │ │   periods   │     │
+│   │ • People    │ │ • Expenses  │ │ • Co-occur  │ │ • Quarters  │     │
+│   │ • Locations │ │ • Ratios    │ │   patterns  │ │ • YoY       │     │
+│   │             │ │             │ │             │ │             │     │
+│   │ [GLiNER]    │ │ [XBRL Parse]│ │ [REBEL]     │ │ [Custom]    │     │
+│   └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘     │
+│                                                                         │
+│   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                      │
+│   │HIERARCHICAL │ │   CAUSAL    │ │    RISK     │                      │
+│   │ ════════════│ │  ═══════════│ │  ═══════════│                      │
+│   │             │ │             │ │             │                      │
+│   │ • Document  │ │ • Cause →   │ │ • Risk      │                      │
+│   │   structure │ │   Effect    │ │   factors   │                      │
+│   │ • Section   │ │ • "due to"  │ │ • Impact    │                      │
+│   │   nesting   │ │ • "because" │ │   severity  │                      │
+│   │             │ │             │ │             │                      │
+│   │ [DocStruct] │ │ [LLM-based] │ │ [Pattern]   │                      │
+│   └─────────────┘ └─────────────┘ └─────────────┘                      │
+│                                                                         │
+│   GRAPH STATISTICS                                                     │
+│   ────────────────                                                     │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                                                                 │  │
+│   │  Node Types               Edge Types                            │  │
+│   │  ──────────               ──────────                            │  │
+│   │  FINANCIAL_LINE  523      HIERARCHICAL    8,234                 │  │
+│   │  TEXT_SECTION    412      SEMANTIC        12,456                │  │
+│   │  NOTE            289      TEMPORAL        3,128                 │  │
+│   │  ENTITY          513      CAUSAL          2,024                 │  │
+│   │                           RISK            1,000                 │  │
+│   │  ──────────────           ──────────────                        │  │
+│   │  Total: 1,737             Total: 26,842                         │  │
+│   │                                                                 │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Page 8: Live Demo (`/demo`)
+
+**Purpose**: The main interactive demonstration.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Live Demo                                     │
+│      Watch dual operators explore the knowledge graph in real-time      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌────────────────────────────────────┐ ┌─────────────────────────────┐│
+│  │                                    │ │                             ││
+│  │     3D KNOWLEDGE GRAPH             │ │     CHAT INTERFACE          ││
+│  │     (Animated traversal)           │ │                             ││
+│  │                                    │ │  ┌───────────────────────┐  ││
+│  │  ┌──────────────────────────────┐  │ │  │ What was Apple's      │  ││
+│  │  │                              │  │ │  │ revenue in FY2023?    │  ││
+│  │  │   [Mode: EXPLOIT]  [Δ: 0.33] │  │ │  └───────────────────────┘  ││
+│  │  │                              │  │ │                             ││
+│  │  │        🔵 Operator A         │  │ │  ┌───────────────────────┐  ││
+│  │  │           ╲                  │  │ │  │ ⚡ EXPLOIT  89%       │  ││
+│  │  │            ╲   ⭐ Evidence   │  │ │  │                       │  ││
+│  │  │             ╲  /             │  │ │  │ Apple's total revenue │  ││
+│  │  │              ╳               │  │ │  │ for FY2023 was        │  ││
+│  │  │             ╱  ╲             │  │ │  │ $383.29 billion.      │  ││
+│  │  │            ╱    ╲            │  │ │  │                       │  ││
+│  │  │        🟢 Operator B         │  │ │  │ Evidence:             │  ││
+│  │  │                              │  │ │  │ • Financial (8)       │  ││
+│  │  │  [Hops: 2/4]  [Nodes: 83]    │  │ │  │ • Text (3)            │  ││
+│  │  │                              │  │ │  │ • Notes (2)           │  ││
+│  │  └──────────────────────────────┘  │ │  │                       │  ││
+│  │                                    │ │  │ Trust: Operator A     │  ││
+│  │  Legend:                           │ │  │ Hops: 2 | Δ: 0.334    │  ││
+│  │  🔵 Operator A  🟢 Operator B      │ │  └───────────────────────┘  ││
+│  │  ⭐ Evidence    🔗 Bridge          │ │                             ││
+│  │                                    │ │  ┌───────────────────────┐  ││
+│  └────────────────────────────────────┘ │  │ Ask about Apple's     │  ││
+│                                         │  │ SEC filings...    [➤] │  ││
+│  ┌────────────────────────────────────┐ │  └───────────────────────┘  ││
+│  │      REAL-TIME METRICS             │ │                             ││
+│  │                                    │ │  Suggested queries:         ││
+│  │  ┌──────┐ ┌──────┐ ┌──────┐       │ │  • Revenue in FY2023        ││
+│  │  │ HOP  │ │ MODE │ │ CONF │       │ │  • R&D expenses             ││
+│  │  │  2   │ │EXPLOI│ │ 89%  │       │ │  • Risk factors             ││
+│  │  └──────┘ └──────┘ └──────┘       │ │  • Margin analysis          ││
+│  │                                    │ │                             ││
+│  │  Divergence: ████████░░ 0.334      │ └─────────────────────────────┘│
+│  │                                    │                                │
+│  │  Δ_E: ████████████░░ 0.63          │                                │
+│  │  Δ_V: █████████░░░░░ 0.57          │                                │
+│  │  Δ_A: ██░░░░░░░░░░░░ 0.03          │                                │
+│  │  Δ_C: ███░░░░░░░░░░░ 0.11          │                                │
+│  │                                    │                                │
+│  └────────────────────────────────────┘                                │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    TRAVERSAL TIMELINE                           │   │
+│  │                                                                 │   │
+│  │  Hop 1              Hop 2              Hop 3              Hop 4 │   │
+│  │   ●──────────────────●                                         │   │
+│  │   │                  │                                         │   │
+│  │   Query        Convergence                                     │   │
+│  │   Start         Achieved                                       │   │
+│  │                                                                 │   │
+│  │  Δ: 0.614 ────────► 0.334                                      │   │
+│  │     -45.6%                                                      │   │
+│  │                                                                 │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Animations for Non-Technical Audience**:
+
+1. **Query Submission**:
+   - Input glows
+   - "Analyzing query..." text appears
+   - Query classification badge animates in
+
+2. **Operator Traversal** (THE WOW MOMENT):
+   ```
+   - Graph zooms to starting region
+   - Blue particles spawn (Operator A) - "Finding financial data..."
+   - Green particles spawn (Operator B) - "Exploring narratives..."
+   - Paths animate through graph
+   - Nodes pulse as visited
+   - Counter: "Operator A: 6 → 45 → 83 nodes"
+   ```
+
+3. **Convergence**:
+   - Bridge edges glow gold
+   - Particles cross between paths
+   - "Operators sharing insights..."
+   - Divergence gauge animates down
+
+4. **Mode Selection**:
+   - Mode badge transforms with particle effect
+   - Confidence meter fills
+   - Color theme shifts to match mode
+
+5. **Answer Reveal**:
+   - Evidence nodes highlight
+   - Answer types in with cursor effect
+   - Evidence panel expands
+
+---
+
+### Page 9: Architecture (`/architecture`)
+
+Keep existing but add interactivity - clicking components navigates to feature pages.
+
+---
+
+### Page 10: Metrics Dashboard (`/metrics`)
+
+**Purpose**: Show system performance with live/historical data.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Performance Metrics                                │
+│              Real-time performance tracking                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ACCURACY METRICS                                                      │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐        │
+│  │      100%        │ │      100%        │ │      100%        │        │
+│  │  Mode Accuracy   │ │ Answer Quality   │ │ Trust Accuracy   │        │
+│  │    3/3 CORRECT   │ │   3/3 CORRECT    │ │   3/3 CORRECT    │        │
+│  │  ██████████████  │ │  ██████████████  │ │  ██████████████  │        │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘        │
+│                                                                         │
+│  CONVERGENCE ANALYSIS                                                  │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    Divergence Over Hops                         │   │
+│  │                                                                 │   │
+│  │  0.8 ┤                                                          │   │
+│  │      │ ●                                                        │   │
+│  │  0.6 ┤  ╲                                                       │   │
+│  │      │   ╲ ── Revenue Query                                     │   │
+│  │  0.4 ┤    ╲___●                                                 │   │
+│  │      │        ╲___●                                             │   │
+│  │  0.2 ┤            ── Opinion Query                              │   │
+│  │      │                                                          │   │
+│  │  0.0 ┼────┬────┬────┬────                                       │   │
+│  │      Hop1 Hop2 Hop3 Hop4                                        │   │
+│  │                                                                 │   │
+│  │  [Toggle: Revenue | Opinion | Causal | All]                     │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  EFFICIENCY METRICS                                                    │
+│  ┌───────────────────────────┐ ┌───────────────────────────┐          │
+│  │   TRAVERSAL EFFICIENCY    │ │   EVIDENCE DISTRIBUTION   │          │
+│  │                           │ │                           │          │
+│  │   Before: 1,134 nodes     │ │      ┌─────┐              │          │
+│  │   After:    76 nodes      │ │      │     │ 62%          │          │
+│  │   ─────────────────       │ │   ┌──┤     │ Financial    │          │
+│  │   Reduction: 93%          │ │   │  │     │              │          │
+│  │                           │ │   │  └─────┘              │          │
+│  │   ✓ No edge caps hit      │ │   │  ┌───┐ 23% Text      │          │
+│  │   ✓ Smart scoring enabled │ │   │  └───┘               │          │
+│  │   ✓ Convergence achieved  │ │   │  ┌──┐ 15% Notes      │          │
+│  │                           │ │   │  └──┘                │          │
+│  └───────────────────────────┘ └───────────────────────────┘          │
+│                                                                         │
+│  QUERY HISTORY                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Query                          Mode      Conf   Hops   Δ       │   │
+│  │  ─────────────────────────────  ────────  ─────  ────   ─────   │   │
+│  │  What was Apple's revenue...    EXPLOIT    89%    2    0.334    │   │
+│  │  Is margin pressure cyclical..  EXPLORE    45%    4    0.365    │   │
+│  │  What factors drove iPhone...   ADAPTIVE   75%    4    0.371    │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Page 11: Team (`/team`)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                             The Team                                    │
+│                                                                         │
+│      OpMech-GraphRAG: Multi-Perspective Knowledge Retrieval             │
+│      Through Quantum-Inspired Operator Mechanics                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐          │
+│   │            │ │            │ │            │ │            │          │
+│   │  Divyansh  │ │  Dhruvish  │ │  Dharmik   │ │  Agastya   │          │
+│   │  Maiwar    │ │  Shah      │ │  Kothari   │ │  Shetty    │          │
+│   │  Singh     │ │            │ │            │ │            │          │
+│   │            │ │            │ │            │ │            │          │
+│   │ [LinkedIn] │ │ [LinkedIn] │ │ [LinkedIn] │ │ [LinkedIn] │          │
+│   │ [GitHub]   │ │ [GitHub]   │ │ [GitHub]   │ │ [GitHub]   │          │
+│   └────────────┘ └────────────┘ └────────────┘ └────────────┘          │
+│                                                                         │
+│                  SP Jain School of Global Management                    │
+│                     Master's in AI in Business                          │
+│                            Dubai Campus                                 │
+│                                                                         │
+│   ─────────────────────────────────────────────────────────────────    │
+│                                                                         │
+│   RESEARCH CONTRIBUTIONS                                               │
+│                                                                         │
+│   ✦ First commutator-based divergence measurement for GraphRAG         │
+│   ✦ Novel dual-operator architecture for multi-perspective retrieval   │
+│   ✦ Intelligent mode selection (EXPLOIT/ADAPTIVE/EXPLORE)              │
+│   ✦ Query-aware trust decisions for numerical accuracy                 │
+│   ✦ MoE-based graph construction with 7 specialized experts            │
+│   ✦ 93% traversal reduction through smart edge scoring                 │
+│                                                                         │
+│                            [View Paper →]                               │
+│                            [GitHub Repo →]                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Part 2: Backend API for Real-Time Updates
+
+### WebSocket Endpoint for Live Traversal
+
+```python
+# backend/websocket_api.py
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import asyncio
+import json
+
+app = FastAPI()
+
+class QueryProgressReporter:
+    """Reports query progress via WebSocket."""
+    
+    def __init__(self, websocket: WebSocket):
+        self.ws = websocket
+    
+    async def report_stage(self, stage: str, data: dict):
+        """Send progress update to frontend."""
+        await self.ws.send_json({
+            "type": stage,
+            "data": data,
+            "timestamp": time.time()
+        })
+    
+    async def report_hop_start(self, hop: int, max_hops: int):
+        await self.report_stage("hop_start", {
+            "current_hop": hop,
+            "max_hops": max_hops
+        })
+    
+    async def report_operator_progress(self, operator: str, nodes: int, edges: int):
+        await self.report_stage("operator_progress", {
+            "operator": operator,
+            "nodes_visited": nodes,
+            "edges_traversed": edges
+        })
+    
+    async def report_divergence(self, delta: float, components: dict):
+        await self.report_stage("divergence_update", {
+            "combined_delta": delta,
+            "delta_E": components["delta_E"],
+            "delta_V": components["delta_V"],
+            "delta_A": components["delta_A"],
+            "delta_C": components["delta_C"]
+        })
+    
+    async def report_convergence(self, bridge_count: int):
+        await self.report_stage("convergence_pressure", {
+            "bridge_seeds_shared": bridge_count
+        })
+    
+    async def report_mode_selected(self, mode: str, confidence: float, reasons: list):
+        await self.report_stage("mode_selected", {
+            "mode": mode,
+            "confidence": confidence,
+            "triggered_by": reasons
+        })
+    
+    async def report_complete(self, result: dict):
+        await self.report_stage("complete", result)
+
+
+@app.websocket("/ws/query")
+async def websocket_query(websocket: WebSocket):
+    await websocket.accept()
+    
+    try:
+        while True:
+            # Receive query from frontend
+            data = await websocket.receive_json()
+            query = data.get("query")
+            
+            if not query:
+                continue
+            
+            # Create progress reporter
+            reporter = QueryProgressReporter(websocket)
+            
+            # Run query with progress reporting
+            result = await run_query_with_progress(query, reporter)
+            
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
+
+async def run_query_with_progress(query: str, reporter: QueryProgressReporter):
+    """Run OpMech query with real-time progress reporting."""
+    
+    # Stage 1: Query Classification
+    await reporter.report_stage("query_classified", {
+        "query_type": "numerical",
+        "complexity": "simple"
+    })
+    await asyncio.sleep(0.3)  # Small delay for visual effect
+    
+    # Stage 2-N: Hop iterations
+    for hop in range(1, max_hops + 1):
+        await reporter.report_hop_start(hop, max_hops)
+        
+        # Operator A
+        await reporter.report_operator_progress("A", 6, 1)
+        await asyncio.sleep(0.2)
+        await reporter.report_operator_progress("A", 45, 38)
+        await asyncio.sleep(0.2)
+        await reporter.report_operator_progress("A", 83, 83)
+        
+        # Operator B
+        await reporter.report_operator_progress("B", 76, 80)
+        await asyncio.sleep(0.2)
+        await reporter.report_operator_progress("B", 98, 120)
+        
+        # Divergence calculation
+        await reporter.report_divergence(0.334, {
+            "delta_E": 0.632,
+            "delta_V": 0.571,
+            "delta_A": 0.029,
+            "delta_C": 0.106
+        })
+        
+        # Check convergence
+        if should_apply_convergence:
+            await reporter.report_convergence(bridge_count=15)
+        
+        # Check termination
+        if should_terminate:
+            break
+    
+    # Stage Final: Mode selection and answer
+    await reporter.report_mode_selected("EXPLOIT", 0.89, 
+        ["strong_answer_agreement", "good_convergence"])
+    
+    await asyncio.sleep(0.3)
+    
+    # Complete with final result
+    await reporter.report_complete({
+        "answer": "Apple's total revenue for FY2023 was $383.29 billion...",
+        "mode": "EXPLOIT",
+        "confidence": 0.89,
+        "hops_used": 2,
+        "final_delta": 0.334,
+        "evidence": {...},
+        "trajectory": [...]
+    })
+```
+
+---
+
+## Part 3: Frontend State Management
+
+```typescript
+// stores/queryStore.ts
+
+import { create } from 'zustand';
+
+interface QueryState {
+  // Query status
+  status: 'idle' | 'classifying' | 'traversing' | 'converging' | 'selecting' | 'complete';
+  
+  // Current query
+  query: string;
+  queryType: string;
+  queryComplexity: string;
+  
+  // Traversal progress
+  currentHop: number;
+  maxHops: number;
+  operatorANodes: number;
+  operatorAEdges: number;
+  operatorBNodes: number;
+  operatorBEdges: number;
+  
+  // Divergence
+  divergence: number;
+  deltaE: number;
+  deltaV: number;
+  deltaA: number;
+  deltaC: number;
+  trajectory: { hop: number; delta: number }[];
+  
+  // Mode & Result
+  mode: 'EXPLOIT' | 'ADAPTIVE' | 'EXPLORE' | null;
+  confidence: number;
+  trustDecision: string;
+  answer: string;
+  evidence: any[];
+  
+  // Actions
+  startQuery: (query: string) => void;
+  updateFromWebSocket: (message: any) => void;
+  reset: () => void;
+}
+
+export const useQueryStore = create<QueryState>((set, get) => ({
+  // Initial state
+  status: 'idle',
+  query: '',
+  queryType: '',
+  queryComplexity: '',
+  currentHop: 0,
+  maxHops: 4,
+  operatorANodes: 0,
+  operatorAEdges: 0,
+  operatorBNodes: 0,
+  operatorBEdges: 0,
+  divergence: 0,
+  deltaE: 0,
+  deltaV: 0,
+  deltaA: 0,
+  deltaC: 0,
+  trajectory: [],
+  mode: null,
+  confidence: 0,
+  trustDecision: '',
+  answer: '',
+  evidence: [],
+  
+  // Actions
+  startQuery: (query) => set({ 
+    status: 'classifying', 
+    query,
+    trajectory: [],
+    answer: ''
+  }),
+  
+  updateFromWebSocket: (message) => {
+    const { type, data } = message;
+    
+    switch (type) {
+      case 'query_classified':
+        set({ 
+          status: 'traversing',
+          queryType: data.query_type,
+          queryComplexity: data.complexity
+        });
+        break;
+        
+      case 'hop_start':
+        set({ 
+          currentHop: data.current_hop,
+          maxHops: data.max_hops
+        });
+        break;
+        
+      case 'operator_progress':
+        if (data.operator === 'A') {
+          set({ 
+            operatorANodes: data.nodes_visited,
+            operatorAEdges: data.edges_traversed
+          });
+        } else {
+          set({ 
+            operatorBNodes: data.nodes_visited,
+            operatorBEdges: data.edges_traversed
+          });
+        }
+        break;
+        
+      case 'divergence_update':
+        set(state => ({ 
+          divergence: data.combined_delta,
+          deltaE: data.delta_E,
+          deltaV: data.delta_V,
+          deltaA: data.delta_A,
+          deltaC: data.delta_C,
+          trajectory: [...state.trajectory, { 
+            hop: state.currentHop, 
+            delta: data.combined_delta 
+          }]
+        }));
+        break;
+        
+      case 'convergence_pressure':
+        set({ status: 'converging' });
+        break;
+        
+      case 'mode_selected':
+        set({ 
+          status: 'selecting',
+          mode: data.mode,
+          confidence: data.confidence
+        });
+        break;
+        
+      case 'complete':
+        set({ 
+          status: 'complete',
+          answer: data.answer,
+          trustDecision: data.trust_decision,
+          evidence: data.evidence
+        });
+        break;
+    }
+  },
+  
+  reset: () => set({
+    status: 'idle',
+    query: '',
+    currentHop: 0,
+    operatorANodes: 0,
+    operatorAEdges: 0,
+    operatorBNodes: 0,
+    operatorBEdges: 0,
+    divergence: 0,
+    trajectory: [],
+    mode: null,
+    answer: ''
+  })
+}));
+```
+
+---
+
+## Part 4: Key Animation Components
+
+### Animated Divergence Gauge
+
+```typescript
+// components/visualization/DivergenceGauge.tsx
+
+import { motion, useSpring } from 'framer-motion';
+import { useQueryStore } from '@/stores/queryStore';
+
+export const DivergenceGauge = () => {
+  const { divergence, deltaE, deltaV, deltaA, deltaC } = useQueryStore();
+  
+  // Smooth animation for gauge
+  const animatedDivergence = useSpring(divergence, { 
+    stiffness: 100, 
+    damping: 20 
+  });
+  
+  // Color based on divergence level
+  const getColor = (value: number) => {
+    if (value < 0.25) return '#10B981'; // Green - EXPLOIT
+    if (value < 0.60) return '#F59E0B'; // Orange - ADAPTIVE
+    return '#EF4444'; // Red - EXPLORE
+  };
+  
+  return (
+    <div className="divergence-gauge">
+      {/* Main circular gauge */}
+      <svg viewBox="0 0 200 200" className="w-48 h-48">
+        {/* Background arc */}
+        <circle
+          cx="100" cy="100" r="80"
+          fill="none"
+          stroke="#E5E7EB"
+          strokeWidth="12"
+          strokeDasharray="502"
+          strokeDashoffset="125"
+          transform="rotate(135 100 100)"
+        />
+        
+        {/* Animated value arc */}
+        <motion.circle
+          cx="100" cy="100" r="80"
+          fill="none"
+          stroke={getColor(divergence)}
+          strokeWidth="12"
+          strokeDasharray="502"
+          strokeDashoffset={502 - (377 * divergence)}
+          strokeLinecap="round"
+          transform="rotate(135 100 100)"
+          initial={{ strokeDashoffset: 502 }}
+          animate={{ strokeDashoffset: 502 - (377 * divergence) }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+        
+        {/* Center text */}
+        <text x="100" y="95" textAnchor="middle" className="text-3xl font-bold">
+          <motion.tspan
+            animate={{ opacity: [0.5, 1] }}
+            transition={{ duration: 0.3 }}
+          >
+            {divergence.toFixed(3)}
+          </motion.tspan>
+        </text>
+        <text x="100" y="115" textAnchor="middle" className="text-sm text-gray-500">
+          Divergence (Δ)
+        </text>
+      </svg>
+      
+      {/* Component bars */}
+      <div className="mt-4 space-y-2">
+        <DivergenceBar label="Δ_E" value={deltaE} color="#3B82F6" />
+        <DivergenceBar label="Δ_V" value={deltaV} color="#8B5CF6" />
+        <DivergenceBar label="Δ_A" value={deltaA} color="#10B981" />
+        <DivergenceBar label="Δ_C" value={deltaC} color="#F59E0B" />
+      </div>
+    </div>
+  );
+};
+
+const DivergenceBar = ({ label, value, color }) => (
+  <div className="flex items-center gap-2">
+    <span className="w-8 text-sm text-gray-600">{label}</span>
+    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+      <motion.div
+        className="h-full rounded-full"
+        style={{ backgroundColor: color }}
+        initial={{ width: 0 }}
+        animate={{ width: `${value * 100}%` }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      />
+    </div>
+    <span className="w-12 text-sm text-right">{value.toFixed(2)}</span>
+  </div>
+);
+```
+
+### Mode Selector Animation
+
+```typescript
+// components/visualization/ModeIndicator.tsx
+
+import { motion, AnimatePresence } from 'framer-motion';
+
+const modeConfig = {
+  EXPLOIT: {
+    icon: '⚡',
+    color: '#3B82F6',
+    bgColor: 'rgba(59, 130, 246, 0.1)',
+    label: 'High Confidence',
+    description: 'Direct answer from authoritative source'
+  },
+  ADAPTIVE: {
+    icon: '⚖️',
+    color: '#F59E0B',
+    bgColor: 'rgba(245, 158, 11, 0.1)',
+    label: 'Balanced View',
+    description: 'Nuanced analysis with context'
+  },
+  EXPLORE: {
+    icon: '🔍',
+    color: '#8B5CF6',
+    bgColor: 'rgba(139, 92, 246, 0.1)',
+    label: 'Multiple Perspectives',
+    description: 'Exploring different viewpoints'
+  }
+};
+
+export const ModeIndicator = () => {
+  const { mode, confidence, status } = useQueryStore();
+  
+  if (!mode) return null;
+  
+  const config = modeConfig[mode];
+  
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={mode}
+        initial={{ scale: 0.8, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.8, opacity: 0, y: -20 }}
+        transition={{ 
+          type: "spring",
+          stiffness: 200,
+          damping: 20
+        }}
+        className="mode-indicator"
+        style={{ backgroundColor: config.bgColor }}
+      >
+        {/* Animated particles on mode change */}
+        <motion.div
+          className="particles"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 1 }}
+        >
+          {[...Array(12)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="particle"
+              style={{ backgroundColor: config.color }}
+              initial={{ x: 0, y: 0, scale: 1 }}
+              animate={{
+                x: Math.cos(i * 30 * Math.PI / 180) * 50,
+                y: Math.sin(i * 30 * Math.PI / 180) * 50,
+                scale: 0,
+                opacity: 0
+              }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          ))}
+        </motion.div>
+        
+        {/* Icon */}
+        <motion.span 
+          className="text-2xl"
+          animate={{ rotate: [0, 10, -10, 0] }}
+          transition={{ duration: 0.5 }}
+        >
+          {config.icon}
+        </motion.span>
+        
+        {/* Mode name */}
+        <span 
+          className="font-bold text-lg"
+          style={{ color: config.color }}
+        >
+          {mode}
+        </span>
+        
+        {/* Confidence */}
+        <motion.span
+          className="text-sm opacity-75"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.75 }}
+          transition={{ delay: 0.2 }}
+        >
+          {(confidence * 100).toFixed(0)}%
+        </motion.span>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+```
+
+---
+
+## Part 5: Navigation Structure
+
+```typescript
+// app/layout.tsx (Next.js App Router)
+
+const navigation = [
+  { name: 'Home', href: '/' },
+  { 
+    name: 'Features', 
+    href: '/features',
+    children: [
+      { name: 'Dual Operators', href: '/features/dual-operators' },
+      { name: 'The Commutator', href: '/features/commutator' },
+      { name: 'Mode Selection', href: '/features/mode-selection' },
+      { name: 'Trust Decision', href: '/features/trust-decision' },
+      { name: 'Graph Construction', href: '/features/graph-construction' },
+    ]
+  },
+  { name: 'Demo', href: '/demo' },
+  { name: 'Architecture', href: '/architecture' },
+  { name: 'Metrics', href: '/metrics' },
+  { name: 'Team', href: '/team' },
+];
+```
+
+---
+
+## Summary: What This Achieves
+
+### For Non-Technical Audience
+
+1. **Visual Storytelling**: Every concept is visualized, not just explained
+2. **Intuitive Animations**: Complex operations become understandable
+3. **Interactive Elements**: Users can experiment and learn
+4. **Progressive Disclosure**: Simple overview → detailed deep dives
+5. **Real-Time Feedback**: Watch the system "think"
+
+### Technical Improvements
+
+1. **Multi-Page Architecture**: Better SEO, faster loads, cleaner code
+2. **WebSocket Integration**: Real-time query progress
+3. **State Management**: Clean separation of concerns
+4. **Responsive Design**: Works on all devices
+5. **Performance**: Lazy loading, code splitting
+
+### Pages Summary
+
+| Page | Purpose | Key Visual |
+|------|---------|------------|
+| `/` | First impression | 3D hero graph |
+| `/features` | Overview | Animated pipeline |
+| `/features/dual-operators` | Deep dive | Side-by-side operator viz |
+| `/features/commutator` | Deep dive | Interactive gauge |
+| `/features/mode-selection` | Deep dive | Mode slider |
+| `/features/trust-decision` | Deep dive | Evidence pyramid |
+| `/features/graph-construction` | Deep dive | MoE expert flow |
+| `/demo` | Main attraction | Full live demo |
+| `/architecture` | Technical | Interactive diagram |
+| `/metrics` | Proof | Dashboard |
+| `/team` | Credits | Team cards |
+
+This creates a **comprehensive, visually stunning showcase** that makes OpMech accessible to anyone while still being technically impressive! 🚀

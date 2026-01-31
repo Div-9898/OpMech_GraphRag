@@ -1,0 +1,79 @@
+[tool.poetry]
+name = "moe-graph-builder"
+version = "0.1.0"
+description = "Knowledge Graph from SEC Filings using Mixture-of-Experts"
+authors = ["Divyansh Maiwar Singh"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Core
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
+
+# Data Ingestion
+requests = "^2.31"
+beautifulsoup4 = "^4.12"
+lxml = "^5.0"
+pandas = "^2.0"
+html5lib = "^1.1"
+
+# ML/NLP (models downloaded separately with user confirmation)
+torch = "^2.0"
+transformers = "^4.36"
+sentence-transformers = "^2.2"
+spacy = "^3.7"
+
+# LLM Client
+openai = "^1.0"
+
+# Graph
+neo4j = "^5.0"
+networkx = "^3.0"
+
+# API
+fastapi = "^0.109"
+uvicorn = {extras = ["standard"], version = "^0.27"}
+websockets = "^12.0"
+
+# Utils
+python-dotenv = "^1.0"
+tqdm = "^4.66"
+loguru = "^0.7"
+numpy = "^1.24"
+aiohttp = "^3.9"
+tenacity = "^8.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+pytest-asyncio = "^0.21"
+black = "^23.0"
+ruff = "^0.1"
+mypy = "^1.0"
+
+[tool.poetry.group.vllm.dependencies]
+vllm = "^0.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+fetch-filings = "scripts.fetch_filings:main"
+build-graph = "scripts.build_graph:main"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true
