@@ -146,7 +146,7 @@ OpMech_MoE_Graph/
 
 ## 2. DVC pipeline stages
 
-The pipeline has **18 stages** in a DAG. Three are **manual gates** where humans must commit annotations before downstream stages run.
+The pipeline has **20 DVC stages** plus **two manual gates** where humans must commit annotations before downstream stages run.
 
 ### Stage DAG
 
