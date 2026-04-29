@@ -290,6 +290,21 @@ This contract is load-bearing for Tier 1.2: switching `use_llm` at construction 
 
 EntityExtractor still receives a Tier 1.1 gold standard (P/R/F1/ECE) — it just does not appear in the Tier 1.2 LLM ablation table.
 
+### Structural edge type (`BRIDGE`)
+
+In addition to the 9 semantic edge types produced by the 6 experts above, the
+graph builder uses a 10th, **structural** edge type:
+
+- `BRIDGE` — produced exclusively by `graph/connectivity.py:ConnectivityEnforcer`
+  to ensure the constructed graph is connected. These edges have no semantic
+  meaning derived from document content; they are inserted between weakly
+  connected components when their similarity exceeds
+  `params.yaml:graph.bridge_min_similarity`.
+
+The headline figure "2 bridge edges over a 22,387-edge graph" (§2.3) refers
+specifically to the count of `BRIDGE`-typed edges. No expert's evaluation
+metrics include `BRIDGE` edges; they are excluded from per-expert gold standards.
+
 ### `src/moe_graph/graph/`
 
 - `neo4j_client.py` — async Neo4j driver wrapper. Copied.
