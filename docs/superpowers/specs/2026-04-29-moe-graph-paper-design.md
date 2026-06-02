@@ -19,16 +19,31 @@ This spec defines the engineering and methodological work to produce empirically
 |---|---|
 | Repo strategy | Two clean repos. Repo A (this paper) first; Repo B (commutator paper) later. Local now, GitHub later. |
 | Repo init approach | Greenfield + DVC pipeline (Approach Gamma). |
-| LLM (system under test) | `Qwen/Qwen3-14B` dense, served via vLLM in FP8 or AWQ on RTX 5090 24GB. |
+| LLM (system under test) | `gemma-4-26B-A4B-it` (Unsloth Q4\_K\_M GGUF) served via llama.cpp on RTX 5090 24GB. **Note:** this backbone is *itself* a token-level sparse MoE (~4B active of 26B) — see the two-level naming note below. (Originally specced as dense `Qwen/Qwen3-14B`.) |
 | LLM (judge, Stage 4) | `claude-sonnet-4-6` via Anthropic API (`claude-opus-4-7` as config-flag override). |
 | Annotation protocol | 4-stage: A + B human → tiebreaker C → LLM audit. |
 | Tier scope | Full Tier 1 + Tier 2 + Tier 3. |
-| Filing scope | 12 Apple SEC filings (10-Ks + recent 10-Qs); MSFT FY2024 as Tier 3.3 spot-check. |
+| Filing scope | 6 Apple 10-Ks (FY2019–FY2024) for the AAPL gold corpus; 6 Alphabet/GOOGL 10-Ks (FY2019–FY2024) as the cross-company test (Tier 3.3), reported on **human gold** (replacing the originally-specced MSFT FY2024 spot-check). |
 | Prompt-tuning rule | Prompts iterated on a held-out dev split (15%) only; locked before test annotation begins. |
 | Annotators | 3 humans confirmed available + LLM as 4th audit. |
 | Realistic timeline | ~4–5 weeks comfortable; ~3 weeks compressed if Tier 3 is dropped. |
 
-**Naming hazard noted up-front (must surface in paper §1):** the "MoE" in this paper refers to mixture-of-experts at the **graph-construction layer** (six hard-routed experts, one per edge type). The Qwen3-14B backbone is dense; we deliberately did not pick a token-level MoE LLM (Qwen3.5-35B-A3B was considered and rejected) to keep this distinction clean.
+**Naming hazard — now TWO levels (must surface in paper §1):** the "MoE" in this paper's *contribution* is mixture-of-experts at the **graph-construction layer** (six hard-routed experts, one per edge type). The original plan picked a *dense* backbone (Qwen3-14B) specifically to keep this clean. In the realised system the backbone is `gemma-4-26B-A4B`, which is *itself* a token-level sparse MoE (~4B active / 26B total). The paper must therefore make a **two-level** distinction explicit: (i) our contribution — hard-routed *edge-type* experts at the graph layer; (ii) the backbone's internal, incidental token-level expert routing. We do not claim a dense backbone; we name both and keep the contribution scoped to the graph layer.
+
+---
+
+## 0a. Reality reconciliation (2026-06-02) — supersedes the original §0 decisions where they conflict
+
+The engineering is complete and differs from the original plan in several committed ways. This addendum is the source of truth for drafting; the original sections below are preserved for provenance.
+
+- **System LLM:** `gemma-4-26B-A4B-it` (Unsloth Q4\_K\_M GGUF, llama.cpp, host port 8011), Phase-3 judges run with `enable_thinking=true`, `max_tokens=8192`. Replaces the specced dense `Qwen/Qwen3-14B`. (Token-level-MoE naming implication handled above.) Judge/verifier LLM is `claude-sonnet-4-6` (unchanged).
+- **Pipeline:** the realised build is **round-8.7**, a fully LLM-driven 4-phase graph: (1) per-chunk LLM entity/relation extraction → (2) LLM topic indexing → (3) five per-expert cross-chunk focused-LLM judges + a numeric-match pass with a Claude-Sonnet Pass-2 verifier → (4) LLM-vetted connectivity bridges. This replaced the original per-expert "rule + optional LLM" design; the rule-only path survives only as the **Tier-2.1 ablation baseline**.
+- **Corpus:** AAPL gold = 6 Apple 10-Ks (FY2019–FY2024). Cross-company = Alphabet/GOOGL 10-Ks (FY2019–FY2024), reported on **human gold** (replaces MSFT spot-check).
+- **Claim 3 — reframed (decision 2026-06-02):** the original "well-connected without artificial bridging (2 bridges over 22,387 edges)" is **inverted** on the precision-optimised round-8.7 graph and is dropped as a headline. Measured AAPL graph: 8,841 nodes / 11,166 edges / 1 component, but **4,548 of those edges are forced `BRIDGE` edges**; strip them and the organic graph fragments into 4,550 components (4,101 isolated singletons), largest holding 13.5% of nodes. Claim 3 becomes a **precision↔connectivity tradeoff finding**: strict typed extraction yields a sparse graph dominated by unconnected `TABLE_ROW` nodes, so global connectivity requires explicit bridging; the bridging concentrates in the table-row stratum where `TableTextConnector` is weakest — pointing at where typed extraction needs work. (This realises risk R8's "report the measured number" guidance.)
+- **AAPL gold results (`results/stats.json`, human A+B):** per-expert F1 (LLM vs rule-only) — Entity 0.94/0.57, CrossRef 0.99/0.33, Causal 0.84/0.00, Temporal 0.73/0.06, TableText 0.91/0.49, Semantic 0.84/0.55 (all with significant McNemar). These are Tables 2 (Claim 1) and 3 (Claim 2).
+- **Venue:** arXiv first, then a venue (not a fixed-deadline conference submission). Supersedes any AIoTC-2026-deadline framing.
+- **Companion (bias) paper:** "Anchored by the Annotator" studies LLM-judge anchoring on *this* paper's A/B annotations. Draft the MoE paper **self-contained**; settle cross-referencing once both are near-final.
+- **Status / critical path:** AAPL core (Claims 1, 2, reframed 3 + calibration + single-LLM baseline) is fully gold-supported now. The **cross-company section is gated on GOOGL human annotation** (templates ready in `annotations_googl/test/`, node text restored after the rule-only `nodes.jsonl` clobber fix, commit `144d436`).
 
 ---
 
@@ -301,9 +316,11 @@ graph builder uses a 10th, **structural** edge type:
   connected components when their similarity exceeds
   `params.yaml:graph.bridge_min_similarity`.
 
-The headline figure "2 bridge edges over a 22,387-edge graph" (§2.3) refers
-specifically to the count of `BRIDGE`-typed edges. No expert's evaluation
-metrics include `BRIDGE` edges; they are excluded from per-expert gold standards.
+The headline figure "2 bridge edges over a 22,387-edge graph" (§2.3) is **obsolete** —
+see §0a. On the realised round-8.7 graph the measured count is 4,548 `BRIDGE` edges
+(AAPL), and Claim 3 is reframed as a precision↔connectivity tradeoff rather than a
+"minimal bridging" claim. `BRIDGE` edges remain excluded from per-expert gold standards
+(no expert's evaluation metrics include them).
 
 ### `src/moe_graph/graph/`
 
