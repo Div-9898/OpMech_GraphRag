@@ -258,4 +258,4 @@ Key configuration options in `src/config.py`:
 
 ---
 
-**Note**: This project is proprietary software. All rights reserved.
+**Note**: Source-available for review — all rights reserved until a license is assigned.
